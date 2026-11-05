@@ -4,6 +4,7 @@ import { Link, NavLink, Outlet } from 'react-router-dom';
 import { SyncBadge } from '@/components/SyncBadge';
 import { Wordmark, cx } from '@/components/ui';
 import { useProfile } from './data';
+import { UpdateBanner } from './pwa';
 
 const TABS = [
   { to: '/', label: 'Inicio', icon: House, end: true },
@@ -36,6 +37,7 @@ export function AppLayout() {
         </div>
       </header>
 
+      <UpdateBanner />
       <main className="flex-1 px-5 pt-2 pb-28">
         <Outlet />
       </main>

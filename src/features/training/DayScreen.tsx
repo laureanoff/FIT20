@@ -180,11 +180,20 @@ function DayView({ day, plan, days, onStart }: { day: L<TrainingDay>; plan: L<Tr
           )}
           {day.status === 'started' && <ResumeButton day={day} />}
           {day.status === 'pending' && !hasExercises && !future && (
-            <Button onClick={() => void completeDay(ctx, day, true)}>
+            <Button variant={p.run ? 'secondary' : 'primary'} onClick={() => void completeDay(ctx, day, true)}>
               <Check className="size-4" aria-hidden /> Marcar como hecho
             </Button>
           )}
-          {day.status === 'pending' && p.run && !future && <p className="text-center text-[13px] text-muted">El registro de carreras con GPS llega en la próxima etapa.</p>}
+          {day.status !== 'completed' && day.status !== 'skipped' && p.run && !future && (
+            <div className="grid grid-cols-2 gap-2">
+              <Link to={`/running/en-curso?dia=${day.id}`} className={cx('inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl text-[15px] font-semibold', hasExercises ? 'bg-raised' : 'bg-accent text-accent-ink')}>
+                <Footprints className="size-4" aria-hidden /> Correr con GPS
+              </Link>
+              <Link to={`/running/manual?dia=${day.id}`} className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-raised text-[15px] font-semibold">
+                Registrar a mano
+              </Link>
+            </div>
+          )}
           {day.status === 'completed' && !hasExercises && (
             <Button variant="secondary" onClick={() => void completeDay(ctx, day, false)}>
               <Undo2 className="size-4" aria-hidden /> Desmarcar

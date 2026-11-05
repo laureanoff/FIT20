@@ -8,6 +8,21 @@ export default defineConfig({
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Partes estables en archivos propios: una actualización de la app no obliga a re-descargar todo.
+        manualChunks(id) {
+          if (id.includes('node_modules/leaflet')) return 'map';
+          if (id.includes('node_modules/@supabase')) return 'supabase';
+          if (id.includes('node_modules/react') || id.includes('node_modules/scheduler') || id.includes('node_modules/react-router')) return 'react';
+          if (id.includes('node_modules/dexie')) return 'dexie';
+          if (id.includes('/src/data/')) return 'catalog';
+          return undefined;
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     tailwindcss(),

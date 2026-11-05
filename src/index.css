@@ -93,3 +93,15 @@ input[type='date'] {
     transition: none !important;
   }
 }
+
+/* Mapa: tiles en modo oscuro y fondo coherente mientras cargan. */
+.leaflet-container.leaflet-container {
+  background: var(--c-raised);
+  font-family: var(--font-sans);
+}
+[data-theme='dark'] .fit20-tiles {
+  filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9);
+}
+.leaflet-control-attribution {
+  font-size: 10px;
+}

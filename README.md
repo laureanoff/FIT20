@@ -14,10 +14,11 @@ PWA instalable en iPhone y Android · React + TypeScript + Vite · Supabase · I
 | Edge Functions (eliminar cuenta, asistente IA opcional) | ✅ Desplegadas |
 | Fase 1: shell, navegación, IndexedDB, auth, onboarding, perfil, dashboard | ✅ |
 | Fase 2: biblioteca, generador de planes, calendario, sesión de fuerza con temporizador, historial | ✅ |
-| Fase 3: running con GPS | 🚧 Siguiente etapa |
+| Fase 3: running con GPS, mapa, registro manual, parciales y marcas | ✅ |
+| Fase 4: nutrición | 🚧 Siguiente etapa |
 | Supabase `fit20` (São Paulo) | ✅ Creado y configurado |
 | GitHub (`laureanoff/FIT20`) | ✅ |
-| Vercel | ⏳ Ver [SETUP.md](SETUP.md) |
+| Vercel (https://fit20.vercel.app) | ✅ |
 
 Detalle de arquitectura, decisiones y plan: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

@@ -33,9 +33,9 @@ export const ENTITY_ORDER: Record<EntityName, number> = {
   workouts: 4,
   workout_exercises: 5,
   exercise_sets: 6,
-  running_sessions: 2,
-  running_splits: 3,
-  running_tracks: 3,
+  running_sessions: 4, // referencia a training_days (3)
+  running_splits: 5,
+  running_tracks: 5,
   food_logs: 2,
   saved_meals: 2,
   water_logs: 2,

@@ -109,6 +109,49 @@ export interface ExerciseFavorite extends Synced {
   exercise_id: string;
 }
 
+// ───────── Running ─────────
+
+export interface RunningSession extends Synced {
+  user_id: string;
+  training_day_id: string | null;
+  session_date: string;
+  started_at: string | null;
+  run_type: string | null;
+  source: 'gps' | 'manual';
+  distance_km: number;
+  duration_seconds: number;
+  target_distance_km: number | null;
+  target_duration_seconds: number | null;
+  rpe: number | null;
+  notes: string | null;
+}
+
+export interface RunningSplit extends Synced {
+  user_id: string;
+  session_id: string;
+  kilometer: number;
+  duration_seconds: number;
+}
+
+/** points = [[lat, lng, elapsed_ms, accuracy, segment], …] (formato compacto del servidor). */
+export type TrackPoint = [number, number, number, number, number];
+
+export interface RunningTrack extends Synced {
+  user_id: string;
+  session_id: string;
+  points: TrackPoint[];
+}
+
+/** Punto crudo de la carrera en curso (solo en el dispositivo, nunca se sincroniza). */
+export interface LivePoint {
+  seq?: number;
+  lat: number;
+  lng: number;
+  accuracy: number;
+  elapsed_ms: number;
+  segment: number;
+}
+
 export type L<T> = T & LocalMeta;
 export type LocalProfile = L<Profile>;
 export type LocalSettings = L<UserSettings>;
@@ -136,6 +179,10 @@ export class Fit20DB extends Dexie {
   workout_exercises!: Table<L<WorkoutExercise>, string>;
   exercise_sets!: Table<L<ExerciseSet>, string>;
   exercise_favorites!: Table<L<ExerciseFavorite>, string>;
+  running_sessions!: Table<L<RunningSession>, string>;
+  running_splits!: Table<L<RunningSplit>, string>;
+  running_tracks!: Table<L<RunningTrack>, string>;
+  live_points!: Table<LivePoint, number>;
   outbox!: Table<SyncOperation, string>;
   conflicts!: Table<StoredConflict, number>;
   meta!: Table<MetaEntry, string>;
@@ -157,6 +204,12 @@ export class Fit20DB extends Dexie {
       exercise_sets: 'id, workout_exercise_id',
       exercise_favorites: 'id, exercise_id',
     });
+    this.version(3).stores({
+      running_sessions: 'id, session_date, training_day_id',
+      running_splits: 'id, session_id',
+      running_tracks: 'id, session_id',
+      live_points: '++seq',
+    });
   }
 }
 
@@ -170,6 +223,9 @@ export const LOCAL_ENTITIES = [
   'workouts',
   'workout_exercises',
   'exercise_sets',
+  'running_sessions',
+  'running_splits',
+  'running_tracks',
 ] as const;
 export type LocalEntity = (typeof LOCAL_ENTITIES)[number];
 
