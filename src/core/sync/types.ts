@@ -21,7 +21,8 @@ export type EntityName =
   | 'water_logs'
   | 'body_measurements'
   | 'progress_photos'
-  | 'exercise_favorites';
+  | 'exercise_favorites'
+  | 'meal_plan_days';
 
 /** Orden de envío: padres antes que hijos para respetar claves foráneas. */
 export const ENTITY_ORDER: Record<EntityName, number> = {
@@ -42,6 +43,7 @@ export const ENTITY_ORDER: Record<EntityName, number> = {
   body_measurements: 2,
   progress_photos: 2,
   exercise_favorites: 2,
+  meal_plan_days: 2,
 };
 
 /**
@@ -71,6 +73,7 @@ export const CONFLICT_POLICY: Record<EntityName, ConflictPolicy> = {
   body_measurements: 'newer_wins',
   progress_photos: 'newer_wins',
   exercise_favorites: 'newer_wins',
+  meal_plan_days: 'newer_wins',
 };
 
 export type SyncStatus = 'pending' | 'syncing' | 'synced' | 'error';

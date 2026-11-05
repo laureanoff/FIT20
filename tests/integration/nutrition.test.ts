@@ -122,3 +122,36 @@ describe('objetivos', () => {
     expect(mealForHour(21)).toBe('dinner');
   });
 });
+
+describe('plan de alimentación', () => {
+  const pc = {
+    targets: { kcal: 2200, protein: 150, carbs: 240, fat: 70, water_ml: 2800, custom: false },
+    profile: { dietary_preferences: ['Vegetariana'], dietary_restrictions: [] },
+    custom: [],
+  };
+
+  it('arma la semana con ids estables y "Lo comí" carga el registro', async () => {
+    const { generateWeek, logPlannedMeal, planDayId, swapPlannedMeal, isOutdated } = await import('@/features/nutrition/mealPlanActions');
+    await generateWeek(ctx, pc, '2026-11-05', 7);
+    const days = await db.meal_plan_days.orderBy('plan_date').toArray();
+    expect(days).toHaveLength(7);
+    expect(days[0]!.id).toBe(await planDayId(UID, '2026-11-05'));
+    // Vegetariano: ninguna comida con carne ni pescado.
+    const ids = days.flatMap((d) => d.meals.flatMap((m) => m.items.map((i) => i.food_item_id)));
+    expect(ids.some((i) => /pollo|vaca|merluza|atun|milanesa|cerdo/.test(i))).toBe(false);
+
+    const day = days[0]!;
+    await logPlannedMeal(ctx, pc, day, 0);
+    const after = (await db.meal_plan_days.get(day.id))!;
+    expect(after.meals[0]!.logged).toBe(true);
+    expect(await db.food_logs.where('log_date').equals('2026-11-05').count()).toBe(day.meals[0]!.items.length);
+
+    // Rearmar la semana no pisa el día con comidas ya cargadas.
+    await generateWeek(ctx, pc, '2026-11-05', 7, ':otra');
+    expect((await db.meal_plan_days.get(day.id))!.meals[0]!.logged).toBe(true);
+
+    await swapPlannedMeal(ctx, pc, after, 1);
+    expect((await db.meal_plan_days.get(day.id))!.meals[1]!.template_id).not.toBe(after.meals[1]!.template_id);
+    expect(isOutdated(after, { ...pc.targets, kcal: 1800 })).toBe(true);
+  });
+});

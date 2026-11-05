@@ -84,8 +84,8 @@ export async function createCustomFood(ctx: Ctx, input: CustomFoodInput): Promis
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
 /** Nombre que deja claro si el peso es crudo (p. ej. "Arroz blanco (crudo)"): confundirlo triplica el error. */
-export function displayName(food: Pick<FoodItem, 'name' | 'state'>): string {
-  if (food.state === 'raw' && !/crud|sec[oa]s?\b/i.test(food.name)) return `${food.name} (crudo)`;
+export function displayName(food: Pick<FoodItem, 'id' | 'name' | 'state'>): string {
+  if (food.state === 'raw' && !/crud|sec[oa]s?\b/i.test(food.name) && Object.keys(COOKING_YIELD).some((k) => food.id.startsWith(`${k}-`))) return `${food.name} (crudo)`;
   return food.name;
 }
 

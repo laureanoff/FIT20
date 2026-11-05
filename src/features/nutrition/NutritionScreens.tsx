@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { BookmarkPlus, ChevronLeft, ChevronRight, Droplets, Plus, Search, Settings2, Trash2, Undo2 } from 'lucide-react';
+import { BookmarkPlus, ChevronLeft, ChevronRight, Droplets, Plus, Search, Settings2, Sparkles, Trash2, Undo2 } from 'lucide-react';
 import { type ChangeEvent, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Button, Card, ErrorBox, Field, SectionTitle, Spinner, Toggle, cx } from '@/components/ui';
@@ -109,6 +109,8 @@ export function NutritionScreen() {
           </p>
         )}
       </Card>
+
+      <PlanCard date={date} />
 
       {/* Agua */}
       <Card>
@@ -652,3 +654,25 @@ export function TargetsScreen() {
   );
 }
 
+
+/** Acceso al plan de alimentación con la próxima comida pendiente del día. */
+function PlanCard({ date }: { date: string }) {
+  const { db } = useData();
+  const plan = useLiveQuery(async () => (await db.meal_plan_days.where('plan_date').equals(date).toArray()).find((d) => !d.deleted_at) ?? null, [db, date]);
+  if (plan === undefined) return null;
+  const next = plan?.meals.find((m) => !m.logged);
+  return (
+    <Link to="/nutricion/plan" className="flex items-center gap-3 rounded-3xl border border-line bg-surface p-4">
+      <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-accent text-accent-ink">
+        <Sparkles className="size-5" aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[15px] font-semibold">Plan de alimentación</span>
+        <span className="block truncate text-[13px] text-muted">
+          {!plan ? 'Armá tus comidas según tu objetivo' : next ? `${MEAL_LABEL[next.meal_type]}: ${next.title}` : '¡Cumpliste el plan del día!'}
+        </span>
+      </span>
+      <ChevronRight className="size-4 shrink-0 text-faint" aria-hidden />
+    </Link>
+  );
+}

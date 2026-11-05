@@ -5,6 +5,7 @@ import { LoginScreen, NewPasswordScreen, RecoverScreen, SignupScreen } from '@/f
 import { DashboardScreen } from '@/features/dashboard/DashboardScreen';
 import { OnboardingScreen } from '@/features/onboarding/OnboardingScreen';
 import { ProfileEditScreen, ProfileScreen } from '@/features/profile/ProfileScreen';
+import { MealPlanScreen } from '@/features/nutrition/MealPlanScreen';
 import { AddFoodScreen, CustomFoodScreen, EditFoodLogScreen, NutritionScreen, TargetsScreen } from '@/features/nutrition/NutritionScreens';
 import { CompareScreen, MeasureScreen, NewPhotoScreen, PhotoScreen, ProgressScreen } from '@/features/progress/ProgressScreens';
 import { LiveRunScreen } from '@/features/running/LiveRunScreen';
@@ -111,6 +112,7 @@ function UserGate() {
         <Route path="nutricion/registro/:id" element={<EditFoodLogScreen />} />
         <Route path="nutricion/alimento-nuevo" element={<CustomFoodScreen />} />
         <Route path="nutricion/objetivos" element={<TargetsScreen />} />
+        <Route path="nutricion/plan" element={<MealPlanScreen />} />
         <Route path="progreso" element={<ProgressScreen />} />
         <Route path="progreso/medir" element={<MeasureScreen />} />
         <Route path="progreso/foto-nueva" element={<NewPhotoScreen />} />

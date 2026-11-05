@@ -1,6 +1,7 @@
 import Dexie, { type Table } from 'dexie';
 import type { DayStatus, MealType, PlanInput, PlanStatus, PlannedDay, Profile, SessionType } from '@/types/domain';
 import type { ConflictEvent, SyncOperation } from '@/core/sync/types';
+import type { PlannedMeal } from '@/core/nutrition/mealplan';
 
 /**
  * Metadatos solo-dispositivo. Los campos que empiezan con "_" nunca se envían al servidor
@@ -241,6 +242,15 @@ export interface PhotoBlob {
   error?: string | null;
 }
 
+// ───────── Plan de alimentación ─────────
+
+export interface MealPlanDay extends Synced {
+  user_id: string;
+  plan_date: string;
+  meals: PlannedMeal[];
+  targets: { kcal: number; protein: number; carbs?: number; fat?: number };
+}
+
 export type L<T> = T & LocalMeta;
 export type LocalProfile = L<Profile>;
 export type LocalSettings = L<UserSettings>;
@@ -279,6 +289,7 @@ export class Fit20DB extends Dexie {
   body_measurements!: Table<L<BodyMeasurement>, string>;
   progress_photos!: Table<L<ProgressPhoto>, string>;
   photo_blobs!: Table<PhotoBlob, string>;
+  meal_plan_days!: Table<L<MealPlanDay>, string>;
   outbox!: Table<SyncOperation, string>;
   conflicts!: Table<StoredConflict, number>;
   meta!: Table<MetaEntry, string>;
@@ -317,6 +328,9 @@ export class Fit20DB extends Dexie {
       progress_photos: 'id, photo_date',
       photo_blobs: 'id, state',
     });
+    this.version(6).stores({
+      meal_plan_days: 'id, plan_date',
+    });
   }
 }
 
@@ -339,6 +353,7 @@ export const LOCAL_ENTITIES = [
   'water_logs',
   'body_measurements',
   'progress_photos',
+  'meal_plan_days',
 ] as const;
 export type LocalEntity = (typeof LOCAL_ENTITIES)[number];
 
