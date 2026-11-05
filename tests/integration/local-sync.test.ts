@@ -168,3 +168,19 @@ describe('sincronización en la app', () => {
     expect(await db.outbox.where('status').equals('pending').count()).toBe(1);
   });
 });
+
+describe('conflictos visibles', () => {
+  it('"Usar la de este dispositivo" vuelve a aplicar los valores locales sobre la versión actual', async () => {
+    const { restoreLocal } = await import('@/features/profile/Conflicts');
+    await db.profiles.put({ ...profile({ session_minutes: 60 }), version: 4, updated_at: '2026-11-05T12:00:00Z', _server_version: 4 });
+    const seq = await db.conflicts.add({
+      entity: 'profiles', entity_id: UID, resolution: 'server_kept', fields: ['session_minutes'],
+      local: { session_minutes: 30 }, server: { id: UID, version: 4, updated_at: '' } as never, at: Date.now(), seen: false,
+    });
+    expect(await restoreLocal(db, (await db.conflicts.get(seq))!)).toBe(true);
+    expect((await db.profiles.get(UID))!.session_minutes).toBe(30);
+    const op = (await db.outbox.toArray())[0]!;
+    expect(op.base_version).toBe(4);
+    expect(op.changed_fields).toEqual(['session_minutes']);
+  });
+});

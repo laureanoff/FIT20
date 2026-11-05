@@ -17,6 +17,7 @@ export interface SyncSnapshot {
 }
 
 const PULL_PAGE = 500;
+const TRANSIENT = /fetch|network|timeout|abort|load failed|sesión|muy seguido|5\d\d|429|jwt|token/i;
 const PERIODIC_MS = 60_000;
 
 /**
@@ -181,14 +182,16 @@ export class SyncEngine {
   async refreshCounts(): Promise<void> {
     const s = await queueStats(outboxStore(this.db));
     const photos = await this.db.photo_blobs.where('state').anyOf('pending', 'delete').count();
+    // Fallas de red o del servidor (se reintentan solas) no son "errores" para la persona: quedan pendientes.
+    const fatal = (await this.db.outbox.where('status').equals('error').toArray()).filter((o) => !TRANSIENT.test(o.last_error ?? '')).length;
     const pending = s.pending + s.syncing + photos;
     let state: SyncState;
     if (!this.client) state = 'no-backend';
     else if (!navigator.onLine) state = 'offline';
     else if (this.cycling) state = 'syncing';
-    else if (s.error) state = 'error';
+    else if (fatal) state = 'error';
     else if (pending) state = 'pending';
     else state = 'synced';
-    this.set({ state, pending: pending + s.error, errors: s.error });
+    this.set({ state, pending: pending + s.error, errors: fatal });
   }
 }

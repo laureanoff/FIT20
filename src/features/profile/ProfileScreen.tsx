@@ -1,5 +1,5 @@
 import Dexie from 'dexie';
-import { ArrowLeft, ChevronRight, LogOut, Trash2 } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Download, LogOut, Trash2 } from 'lucide-react';
 import { type ComponentType, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Button, Card, ErrorBox, Field, SectionTitle, Segmented, Toggle } from '@/components/ui';
@@ -7,9 +7,10 @@ import { syncLabel } from '@/components/SyncBadge';
 import { useData, useOnline, useProfile, useSyncStatus } from '@/app/data';
 import { GOAL_LABELS, INJURY_LABELS, LEVEL_LABELS, RUN_LABELS, WEEKDAYS } from '@/app/labels';
 import { EQUIPMENT_LABELS } from '@/data/exercises';
-import { closeUserDB } from '@/lib/db/database';
+import { type Fit20DB, LOCAL_ENTITIES, closeUserDB, tableFor } from '@/lib/db/database';
 import { supabase } from '@/lib/supabase';
 import { initials } from '@/app/AppLayout';
+import { ConflictsList } from './Conflicts';
 import { type DraftErrors, type ProfileDraft, STEP_FIELDS, draftFromProfile, profileFields, stepErrors } from './form';
 import { AboutSection, EquipmentSection, ExperienceSection, FoodSection, GoalSection, ScheduleSection, type SectionProps } from './sections';
 
@@ -117,6 +118,7 @@ function SyncCard() {
         {lastSyncAt ? `Última sincronización: ${new Date(lastSyncAt).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}` : 'Todo lo que registrás se guarda primero en este dispositivo y se sube a la nube cuando hay conexión.'}
       </p>
       {errors > 0 && lastError && <p className="mt-2 text-[13px] break-words text-danger">{lastError}</p>}
+      <ConflictsList />
       {(errors > 0 || pending > 0) && state !== 'offline' && (
         <Button
           variant="secondary"
@@ -174,6 +176,9 @@ function AccountCard() {
           Tenés {pending} {pending === 1 ? 'cambio' : 'cambios'} sin subir. Quedan guardados en este dispositivo y se suben cuando vuelvas a iniciar sesión acá. Tocá de nuevo para salir.
         </p>
       )}
+      <Button variant="secondary" className="mb-2 w-full" onClick={() => void exportData(db)}>
+        <Download className="size-4" aria-hidden /> Descargar mis datos
+      </Button>
       <Button variant="secondary" className="w-full" onClick={signOut}>
         <LogOut className="size-4" aria-hidden /> Cerrar sesión
       </Button>
@@ -244,4 +249,24 @@ export function ProfileEditScreen() {
       </Button>
     </div>
   );
+}
+
+/** Copia de todos tus datos en un archivo JSON (las fotos quedan fuera: se descargan desde Progreso). */
+export async function exportData(db: Fit20DB): Promise<void> {
+  const out: Record<string, unknown[]> = {};
+  for (const e of LOCAL_ENTITIES) {
+    const rows = (await tableFor(db, e).toArray()) as Record<string, unknown>[];
+    out[e] = rows
+      .filter((r) => !r.deleted_at && !(e === 'food_items' && !r.owner_id))
+      .map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => !k.startsWith('_'))));
+  }
+  const blob = new Blob([JSON.stringify({ app: 'FIT20', exported_at: new Date().toISOString(), data: out }, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `fit20-datos-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
 }

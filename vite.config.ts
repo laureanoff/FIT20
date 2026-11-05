@@ -39,8 +39,14 @@ export default defineConfig({
         scope: '/',
         display: 'standalone',
         orientation: 'portrait',
-        background_color: '#111111',
+        background_color: '#000000',
         theme_color: '#111111',
+        shortcuts: [
+          { name: 'Entrenar hoy', short_name: 'Entrenar', url: '/entrenar', icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }] },
+          { name: 'Correr con GPS', short_name: 'Correr', url: '/running/en-curso', icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }] },
+          { name: 'Registrar comida', short_name: 'Comida', url: '/nutricion/agregar', icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }] },
+          { name: 'Registrar peso', short_name: 'Peso', url: '/progreso/medir', icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }] },
+        ],
         icons: [
           { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },

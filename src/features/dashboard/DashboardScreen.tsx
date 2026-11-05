@@ -9,6 +9,11 @@ import { energyFor } from '@/features/profile/energy';
 import { useOpenWorkout, useTodayDay } from '@/features/training/hooks';
 import { SESSION_LABELS } from '@/features/training/format';
 import { useDayLog, useTargets } from '@/features/nutrition/hooks';
+import { InstallCard } from '@/app/pwa';
+import { useData } from '@/app/data';
+import { alive } from '@/lib/db/database';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { Check, CircleCheck } from 'lucide-react';
 
 const kg = (n: number) => `${n.toLocaleString('es-AR', { maximumFractionDigits: 1 })} kg`;
 
@@ -41,6 +46,8 @@ export function DashboardScreen() {
 
       {/* Hoy */}
       <TodayHero trainsToday={trainsToday} sessionMinutes={profile.session_minutes} />
+
+      <TodayChecklist />
 
       {/* Semana */}
       <Card>
@@ -85,6 +92,8 @@ export function DashboardScreen() {
         </SectionTitle>
         <WeightGoal current={profile.current_weight_kg} target={profile.target_weight_kg} height={profile.height_cm} />
       </Card>
+
+      <InstallCard />
     </div>
   );
 }
@@ -119,6 +128,7 @@ function TodayHero({ trainsToday, sessionMinutes }: { trainsToday: boolean; sess
   let sub: string;
   let cta: { to: string; label: string };
   let active: boolean;
+  let done = false;
   if (open) {
     active = true;
     title = open.name;
@@ -126,7 +136,7 @@ function TodayHero({ trainsToday, sessionMinutes }: { trainsToday: boolean; sess
     cta = { to: `/entrenar/sesion/${open.id}`, label: 'Retomar' };
   } else if (day) {
     const rest = day.session_type === 'rest';
-    const done = day.status === 'completed';
+    done = day.status === 'completed';
     active = !rest && !done && day.status !== 'skipped';
     title = day.planned.title;
     sub = done
@@ -150,7 +160,7 @@ function TodayHero({ trainsToday, sessionMinutes }: { trainsToday: boolean; sess
           <p className="mt-1 text-[22px] leading-tight font-bold">{title}</p>
           <p className={cx('mt-1 text-[14px]', active ? 'opacity-75' : 'text-muted')}>{sub}</p>
         </div>
-        {active ? <Dumbbell className="size-7 shrink-0" aria-hidden /> : <BedDouble className="size-7 shrink-0 text-muted" aria-hidden />}
+        {active ? <Dumbbell className="size-7 shrink-0" aria-hidden /> : done ? <CircleCheck className="size-7 shrink-0 text-ok" aria-hidden /> : <BedDouble className="size-7 shrink-0 text-muted" aria-hidden />}
       </div>
       <Link to={cta.to} className={cx('mt-5 inline-flex min-h-11 items-center gap-2 rounded-2xl px-4 text-[14px] font-semibold', active ? 'bg-accent-ink text-accent' : 'bg-raised text-ink')}>
         {cta.label} <ArrowRight className="size-4" aria-hidden />
@@ -195,5 +205,54 @@ function TodayNutrition({ missing }: { missing: string[] | null }) {
         </span>
       </div>
     </Link>
+  );
+}
+
+interface Todo {
+  key: string;
+  label: string;
+  done: boolean;
+  to: string;
+}
+
+/** Lista corta de lo que conviene hacer hoy, armada con lo que ya está registrado. */
+function TodayChecklist() {
+  const { db } = useData();
+  const today = localToday();
+  const day = useTodayDay();
+  const log = useDayLog(today);
+  const targets = useTargets();
+  const lastWeight = useLiveQuery(async () => {
+    const ms = (await db.body_measurements.toArray()).filter((m) => alive(m) && m.weight_kg !== null);
+    return ms.reduce<string | null>((a, m) => (!a || m.measured_on > a ? m.measured_on : a), null);
+  }, [db]);
+  if (day === undefined || !log || lastWeight === undefined) return null;
+
+  const todos: Todo[] = [];
+  if (day && day.session_type !== 'rest' && day.status !== 'skipped') {
+    todos.push({ key: 'train', label: day.planned.run && !day.planned.exercises.length ? 'Salir a correr' : 'Entrenar', done: day.status === 'completed', to: `/entrenar/dia/${day.id}` });
+  }
+  const meals = new Set(log.logs.map((l) => l.meal_type)).size;
+  todos.push({ key: 'food', label: 'Registrar tus comidas', done: meals >= 3, to: '/nutricion' });
+  if (targets) todos.push({ key: 'water', label: `Tomar ${(targets.water_ml / 1000).toLocaleString('es-AR', { maximumFractionDigits: 1 })} L de agua`, done: log.water_ml >= targets.water_ml, to: '/nutricion' });
+  const weekAgo = addDays(today, -7);
+  if (!lastWeight || lastWeight <= weekAgo) todos.push({ key: 'weight', label: 'Pesarte (una vez por semana)', done: false, to: '/progreso/medir' });
+  const done = todos.filter((t) => t.done).length;
+
+  return (
+    <Card>
+      <SectionTitle action={<span className="num -mt-3 text-[13px] text-muted">{done}/{todos.length}</span>}>Para hoy</SectionTitle>
+      <ul className="flex flex-col gap-1">
+        {todos.map((t) => (
+          <li key={t.key}>
+            <Link to={t.to} className="flex min-h-11 items-center gap-3 rounded-xl px-1">
+              <span className={cx('grid size-6 shrink-0 place-items-center rounded-full border-2', t.done ? 'border-ok bg-ok text-bg' : 'border-line')}>{t.done && <Check className="size-3.5" strokeWidth={3} aria-hidden />}</span>
+              <span className={cx('flex-1 text-[15px]', t.done && 'text-muted line-through')}>{t.label}</span>
+              {!t.done && <ArrowRight className="size-4 text-faint" aria-hidden />}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }

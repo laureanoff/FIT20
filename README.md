@@ -18,10 +18,19 @@ PWA instalable en iPhone y Android · React + TypeScript + Vite · Supabase · I
 | Fase 4: nutrición (buscador, porciones, agua, objetivos, comidas guardadas, alimentos propios) | ✅ |
 | Fase 5: progreso (peso, medidas, fotos privadas, gráficos, antes y después) | ✅ |
 | Plan de alimentación según el objetivo (semana de comidas, cambiar, rearmar, "Lo comí") | ✅ |
-| Fase 6–7: conflictos visibles, notificaciones, pulido PWA | 🚧 Siguiente etapa |
+| Fase 6: sincronización en la app, indicador de estado, conflictos visibles con "usar la de este dispositivo" | ✅ |
+| Fase 7: PWA instalable (íconos, atajos, guía para iPhone/Android, actualización sin cortes), "Para hoy", exportar datos, prueba end-to-end | ✅ |
 | Supabase `fit20` (São Paulo) | ✅ Creado y configurado |
 | GitHub (`laureanoff/FIT20`) | ✅ |
 | Vercel (https://fit20.vercel.app) | ✅ |
+
+## Usarla sin internet
+
+1. La primera vez, con conexión: abrí https://fit20.vercel.app e iniciá sesión (espera unos segundos en el inicio).
+2. Instalala: **iPhone** → Safari → Compartir → *Agregar a inicio*. **Android** → Chrome → ⋮ → *Instalar app*.
+3. Desde ahí funciona sin conexión: plan, entrenamiento, GPS, comidas, peso y fotos se guardan en el teléfono y se suben solos al reconectar.
+
+Necesitan internet: crear la cuenta / iniciar sesión, sincronizar entre dispositivos y el fondo del mapa en zonas no vistas. En iPhone el GPS se pausa si la app queda en segundo plano.
 
 Detalle de arquitectura, decisiones y plan: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -36,9 +45,10 @@ npm run dev
 ## Pruebas
 
 ```bash
-npm run test:core   # typecheck estricto + 64 tests del núcleo (sin red ni navegador)
+npm run test:core   # typecheck estricto + 69 tests del núcleo (sin red ni navegador)
 npm run test:db     # migraciones + RLS sobre un Postgres local descartable
-npm test            # núcleo + Vitest (IndexedDB, sincronización en la app, formularios)
+npm test            # núcleo + Vitest (IndexedDB, sincronización, entrenamiento, running, nutrición, progreso)
+python3 scripts/e2e_smoke.py  # recorrido completo en Chrome sin conexión (ver el encabezado del script)
 ```
 
 `test:db` necesita PostgreSQL 15+ instalado localmente. No toca ningún proyecto de Supabase.
