@@ -13,7 +13,8 @@ PWA instalable en iPhone y Android · React + TypeScript + Vite · Supabase · I
 | Base de datos: esquema, RLS, Storage privado, catálogo | ✅ Aplicada en el proyecto Supabase `fit20` |
 | Edge Functions (eliminar cuenta, asistente IA opcional) | ✅ Desplegadas |
 | Fase 1: shell, navegación, IndexedDB, auth, onboarding, perfil, dashboard | ✅ |
-| Fase 2: biblioteca, generador de planes, sesión de fuerza | 🚧 Siguiente etapa |
+| Fase 2: biblioteca, generador de planes, calendario, sesión de fuerza con temporizador, historial | ✅ |
+| Fase 3: running con GPS | 🚧 Siguiente etapa |
 | Supabase `fit20` (São Paulo) | ✅ Creado y configurado |
 | GitHub (`laureanoff/FIT20`) | ✅ |
 | Vercel | ⏳ Ver [SETUP.md](SETUP.md) |

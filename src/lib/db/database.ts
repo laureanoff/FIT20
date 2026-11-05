@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { Profile } from '@/types/domain';
+import type { DayStatus, PlanInput, PlanStatus, PlannedDay, Profile, SessionType } from '@/types/domain';
 import type { ConflictEvent, SyncOperation } from '@/core/sync/types';
 
 /**
@@ -11,10 +11,16 @@ export interface LocalMeta {
   _server_version: number | null;
 }
 
+interface Synced {
+  id: string;
+  version: number;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
 export type ThemePreference = 'dark' | 'light' | 'system';
 
-export interface UserSettings {
-  id: string;
+export interface UserSettings extends Synced {
   user_id: string;
   theme: ThemePreference;
   units: 'metric' | 'imperial';
@@ -25,13 +31,87 @@ export interface UserSettings {
   reminders: unknown[];
   offline_enabled: boolean;
   nutrition_targets: Record<string, number> | null;
-  version: number;
-  updated_at: string;
-  deleted_at: string | null;
 }
 
-export type LocalProfile = Profile & LocalMeta;
-export type LocalSettings = UserSettings & LocalMeta;
+// ───────── Entrenamiento (espejo de las tablas de Supabase) ─────────
+
+export interface TrainingPlan extends Synced {
+  user_id: string;
+  name: string;
+  goal: string;
+  input: PlanInput;
+  duration_days: number;
+  start_date: string;
+  end_date: string;
+  status: PlanStatus;
+  paused_at: string | null;
+}
+
+export interface ReadinessRecord {
+  fatigue: number;
+  pain_regions: string[];
+  changes: string[];
+  warnings: string[];
+  recommend_professional: boolean;
+  reported_at: string;
+}
+
+export interface TrainingDay extends Synced {
+  user_id: string;
+  plan_id: string;
+  date: string;
+  day_number: number;
+  session_type: SessionType;
+  status: DayStatus;
+  planned: PlannedDay;
+  readiness: ReadinessRecord | null;
+  notes: string | null;
+}
+
+export type WorkoutStatus = 'started' | 'completed' | 'abandoned';
+
+export interface Workout extends Synced {
+  user_id: string;
+  training_day_id: string | null;
+  name: string;
+  category: string;
+  estimated_duration_min: number | null;
+  status: WorkoutStatus;
+  started_at: string;
+  completed_at: string | null;
+  duration_seconds: number | null;
+  rpe: number | null;
+  notes: string | null;
+}
+
+export interface WorkoutExercise extends Synced {
+  user_id: string;
+  workout_id: string;
+  exercise_id: string;
+  order_index: number;
+  sets: number;
+  repetitions: string;
+  rest_seconds: number;
+}
+
+export interface ExerciseSet extends Synced {
+  user_id: string;
+  workout_exercise_id: string;
+  set_number: number;
+  repetitions_completed: number | null;
+  duration_seconds: number | null;
+  weight_kg: number | null;
+  completed_at: string;
+}
+
+export interface ExerciseFavorite extends Synced {
+  user_id: string;
+  exercise_id: string;
+}
+
+export type L<T> = T & LocalMeta;
+export type LocalProfile = L<Profile>;
+export type LocalSettings = L<UserSettings>;
 
 export interface StoredConflict extends ConflictEvent {
   seq?: number;
@@ -50,6 +130,12 @@ export interface MetaEntry {
 export class Fit20DB extends Dexie {
   profiles!: Table<LocalProfile, string>;
   user_settings!: Table<LocalSettings, string>;
+  training_plans!: Table<L<TrainingPlan>, string>;
+  training_days!: Table<L<TrainingDay>, string>;
+  workouts!: Table<L<Workout>, string>;
+  workout_exercises!: Table<L<WorkoutExercise>, string>;
+  exercise_sets!: Table<L<ExerciseSet>, string>;
+  exercise_favorites!: Table<L<ExerciseFavorite>, string>;
   outbox!: Table<SyncOperation, string>;
   conflicts!: Table<StoredConflict, number>;
   meta!: Table<MetaEntry, string>;
@@ -63,14 +149,32 @@ export class Fit20DB extends Dexie {
       conflicts: '++seq, entity, seen',
       meta: 'key',
     });
+    this.version(2).stores({
+      training_plans: 'id, status, start_date',
+      training_days: 'id, plan_id, date, [plan_id+date]',
+      workouts: 'id, training_day_id, status, started_at',
+      workout_exercises: 'id, workout_id, exercise_id',
+      exercise_sets: 'id, workout_exercise_id',
+      exercise_favorites: 'id, exercise_id',
+    });
   }
 }
 
-/** Tablas sincronizables presentes en la base local (crecen en cada fase). */
-export const LOCAL_ENTITIES = ['profiles', 'user_settings'] as const;
+/** Tablas sincronizables presentes en la base local, en orden padre → hijo. */
+export const LOCAL_ENTITIES = [
+  'profiles',
+  'user_settings',
+  'exercise_favorites',
+  'training_plans',
+  'training_days',
+  'workouts',
+  'workout_exercises',
+  'exercise_sets',
+] as const;
 export type LocalEntity = (typeof LOCAL_ENTITIES)[number];
 
-export function tableFor(db: Fit20DB, entity: LocalEntity): Table<LocalProfile | LocalSettings, string> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function tableFor(db: Fit20DB, entity: LocalEntity): Table<any, string> {
   return db.table(entity);
 }
 
@@ -95,3 +199,6 @@ export async function getMeta<T>(db: Fit20DB, key: string): Promise<T | undefine
 export async function setMeta(db: Fit20DB, key: string, value: unknown): Promise<void> {
   await db.meta.put({ key, value });
 }
+
+/** Registros vivos (sin borrado lógico). */
+export const alive = <T extends { deleted_at: string | null }>(r: T | undefined | null): r is T => !!r && !r.deleted_at;

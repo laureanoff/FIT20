@@ -5,6 +5,12 @@ import { LoginScreen, NewPasswordScreen, RecoverScreen, SignupScreen } from '@/f
 import { DashboardScreen } from '@/features/dashboard/DashboardScreen';
 import { OnboardingScreen } from '@/features/onboarding/OnboardingScreen';
 import { ProfileEditScreen, ProfileScreen } from '@/features/profile/ProfileScreen';
+import { DayScreen } from '@/features/training/DayScreen';
+import { HistoryScreen, WorkoutDetailScreen } from '@/features/training/HistoryScreens';
+import { ExerciseDetailScreen, LibraryScreen } from '@/features/training/LibraryScreens';
+import { PlanBuilderScreen } from '@/features/training/PlanBuilderScreen';
+import { SessionScreen } from '@/features/training/SessionScreen';
+import { TrainScreen } from '@/features/training/TrainScreen';
 import { backendMissing } from '@/lib/supabase';
 import { AppLayout, ComingSoon, SECTIONS } from './AppLayout';
 import { AuthProvider, useAuth } from './auth';
@@ -84,7 +90,14 @@ function UserGate() {
     <Routes>
       <Route element={<AppLayout />}>
         <Route index element={<DashboardScreen />} />
-        <Route path="entrenar" element={<ComingSoon {...SECTIONS.train} />} />
+        <Route path="entrenar" element={<TrainScreen />} />
+        <Route path="entrenar/nuevo" element={<PlanBuilderScreen />} />
+        <Route path="entrenar/dia/:id" element={<DayScreen />} />
+        <Route path="entrenar/sesion/:id" element={<SessionScreen />} />
+        <Route path="entrenar/biblioteca" element={<LibraryScreen />} />
+        <Route path="entrenar/ejercicio/:id" element={<ExerciseDetailScreen />} />
+        <Route path="entrenar/historial" element={<HistoryScreen />} />
+        <Route path="entrenar/historial/:id" element={<WorkoutDetailScreen />} />
         <Route path="running" element={<ComingSoon {...SECTIONS.run} />} />
         <Route path="nutricion" element={<ComingSoon {...SECTIONS.food} />} />
         <Route path="progreso" element={<ComingSoon {...SECTIONS.progress} />} />

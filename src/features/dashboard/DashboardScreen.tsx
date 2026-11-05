@@ -6,6 +6,8 @@ import { GOAL_LABELS, WEEKDAYS } from '@/app/labels';
 import { bmi } from '@/core/nutrition/energy';
 import { addDays, localToday, startOfWeek, weekday } from '@/core/utils/date';
 import { energyFor } from '@/features/profile/energy';
+import { useOpenWorkout, useTodayDay } from '@/features/training/hooks';
+import { SESSION_LABELS } from '@/features/training/format';
 
 const kg = (n: number) => `${n.toLocaleString('es-AR', { maximumFractionDigits: 1 })} kg`;
 
@@ -37,24 +39,7 @@ export function DashboardScreen() {
       </div>
 
       {/* Hoy */}
-      <section className={cx('rounded-3xl p-5', trainsToday ? 'bg-accent text-accent-ink' : 'border border-line bg-surface')}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className={cx('text-[13px] font-semibold tracking-wide uppercase', trainsToday ? 'opacity-70' : 'text-muted')}>Hoy</p>
-            <p className="mt-1 text-[22px] leading-tight font-bold">{trainsToday ? 'Día de entrenamiento' : 'Día de descanso'}</p>
-            <p className={cx('mt-1 text-[14px]', trainsToday ? 'opacity-75' : 'text-muted')}>
-              {trainsToday ? `${profile.session_minutes} minutos reservados para vos.` : 'Recuperarse también es parte del plan. Una caminata suave suma.'}
-            </p>
-          </div>
-          {trainsToday ? <Dumbbell className="size-7 shrink-0" aria-hidden /> : <BedDouble className="size-7 shrink-0 text-muted" aria-hidden />}
-        </div>
-        <Link
-          to="/entrenar"
-          className={cx('mt-5 inline-flex min-h-11 items-center gap-2 rounded-2xl px-4 text-[14px] font-semibold', trainsToday ? 'bg-accent-ink text-accent' : 'bg-raised text-ink')}
-        >
-          Ver mi plan <ArrowRight className="size-4" aria-hidden />
-        </Link>
-      </section>
+      <TodayHero trainsToday={trainsToday} sessionMinutes={profile.session_minutes} />
 
       {/* Semana */}
       <Card>
@@ -162,5 +147,54 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="num text-[17px] font-semibold">{value}</div>
       <div className="text-[12px] text-muted">{label}</div>
     </div>
+  );
+}
+
+function TodayHero({ trainsToday, sessionMinutes }: { trainsToday: boolean; sessionMinutes: number }) {
+  const day = useTodayDay();
+  const open = useOpenWorkout();
+  if (day === undefined) return <div className="h-44 rounded-3xl bg-surface" aria-hidden />;
+
+  let title: string;
+  let sub: string;
+  let cta: { to: string; label: string };
+  let active: boolean;
+  if (open) {
+    active = true;
+    title = open.name;
+    sub = 'Tenés una sesión en curso.';
+    cta = { to: `/entrenar/sesion/${open.id}`, label: 'Retomar' };
+  } else if (day) {
+    const rest = day.session_type === 'rest';
+    const done = day.status === 'completed';
+    active = !rest && !done && day.status !== 'skipped';
+    title = day.planned.title;
+    sub = done
+      ? '¡Hecho! Buen trabajo.'
+      : rest
+        ? 'Recuperarse también es parte del plan. Una caminata suave suma.'
+        : `${SESSION_LABELS[day.session_type]} · ~${day.planned.estimated_minutes} min${day.planned.exercises.length ? ` · ${day.planned.exercises.length} ejercicios` : ''}`;
+    cta = { to: `/entrenar/dia/${day.id}`, label: active ? 'Ver sesión de hoy' : 'Ver el día' };
+  } else {
+    active = trainsToday;
+    title = trainsToday ? 'Día de entrenamiento' : 'Día de descanso';
+    sub = trainsToday ? `${sessionMinutes} minutos reservados para vos. Armá tu plan para saber qué hacer.` : 'Recuperarse también es parte del plan. Una caminata suave suma.';
+    cta = { to: '/entrenar/nuevo', label: 'Armar mi plan' };
+  }
+
+  return (
+    <section className={cx('rounded-3xl p-5', active ? 'bg-accent text-accent-ink' : 'border border-line bg-surface')}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className={cx('text-[13px] font-semibold tracking-wide uppercase', active ? 'opacity-70' : 'text-muted')}>Hoy</p>
+          <p className="mt-1 text-[22px] leading-tight font-bold">{title}</p>
+          <p className={cx('mt-1 text-[14px]', active ? 'opacity-75' : 'text-muted')}>{sub}</p>
+        </div>
+        {active ? <Dumbbell className="size-7 shrink-0" aria-hidden /> : <BedDouble className="size-7 shrink-0 text-muted" aria-hidden />}
+      </div>
+      <Link to={cta.to} className={cx('mt-5 inline-flex min-h-11 items-center gap-2 rounded-2xl px-4 text-[14px] font-semibold', active ? 'bg-accent-ink text-accent' : 'bg-raised text-ink')}>
+        {cta.label} <ArrowRight className="size-4" aria-hidden />
+      </Link>
+    </section>
   );
 }
