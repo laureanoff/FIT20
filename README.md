@@ -12,9 +12,11 @@ PWA instalable en iPhone y Android · React + TypeScript + Vite · Supabase · I
 | Biblioteca de 106 ejercicios · base de 100 alimentos argentinos | ✅ |
 | Base de datos: esquema, RLS, Storage privado, catálogo | ✅ Aplicada en el proyecto Supabase `fit20` |
 | Edge Functions (eliminar cuenta, asistente IA opcional) | ✅ Desplegadas |
-| Interfaz (pantallas, navegación, PWA, IndexedDB) | 🚧 Siguiente etapa |
+| Fase 1: shell, navegación, IndexedDB, auth, onboarding, perfil, dashboard | ✅ |
+| Fase 2: biblioteca, generador de planes, sesión de fuerza | 🚧 Siguiente etapa |
 | Supabase `fit20` (São Paulo) | ✅ Creado y configurado |
-| GitHub / Vercel nuevos | ⏳ Ver [SETUP.md](SETUP.md) |
+| GitHub (`laureanoff/FIT20`) | ✅ |
+| Vercel | ⏳ Ver [SETUP.md](SETUP.md) |
 
 Detalle de arquitectura, decisiones y plan: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -31,7 +33,7 @@ npm run dev
 ```bash
 npm run test:core   # typecheck estricto + 64 tests del núcleo (sin red ni navegador)
 npm run test:db     # migraciones + RLS sobre un Postgres local descartable
-npm test            # suite completa con Vitest (incluye UI, cuando esté)
+npm test            # núcleo + Vitest (IndexedDB, sincronización en la app, formularios)
 ```
 
 `test:db` necesita PostgreSQL 15+ instalado localmente. No toca ningún proyecto de Supabase.

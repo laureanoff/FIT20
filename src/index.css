@@ -1,0 +1,95 @@
+@import 'tailwindcss';
+
+/* Tokens de color: el tema se elige con data-theme en <html> (oscuro por defecto). */
+:root,
+[data-theme='dark'] {
+  --c-bg: #111111;
+  --c-surface: #1a1a19;
+  --c-raised: #232322;
+  --c-line: #2e2e2c;
+  --c-ink: #f3f2ee;
+  --c-muted: #9b9a94;
+  --c-faint: #6b6a65;
+  --c-accent: #d7ff3c;
+  --c-accent-ink: #111111;
+  --c-ok: #43d6a0;
+  --c-warn: #ffb547;
+  --c-danger: #ff6250;
+  color-scheme: dark;
+}
+
+[data-theme='light'] {
+  --c-bg: #f4f3ef;
+  --c-surface: #ffffff;
+  --c-raised: #ecebe6;
+  --c-line: #dcdbd5;
+  --c-ink: #151514;
+  --c-muted: #64635e;
+  --c-faint: #8d8c86;
+  --c-accent: #b8e200;
+  --c-accent-ink: #111111;
+  --c-ok: #12936a;
+  --c-warn: #b86e00;
+  --c-danger: #d33a28;
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-bg: var(--c-bg);
+  --color-surface: var(--c-surface);
+  --color-raised: var(--c-raised);
+  --color-line: var(--c-line);
+  --color-ink: var(--c-ink);
+  --color-muted: var(--c-muted);
+  --color-faint: var(--c-faint);
+  --color-accent: var(--c-accent);
+  --color-accent-ink: var(--c-accent-ink);
+  --color-ok: var(--c-ok);
+  --color-warn: var(--c-warn);
+  --color-danger: var(--c-danger);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  background: var(--c-bg);
+  color: var(--c-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* Números de métricas: ancho fijo y trazo compacto. */
+.num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.pt-safe {
+  padding-top: max(env(safe-area-inset-top), 0px);
+}
+.pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom), 0px);
+}
+
+input[type='date'] {
+  min-height: 2.75rem;
+}
+
+:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

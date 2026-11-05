@@ -1,0 +1,22 @@
+# Dependencias y builds
+node_modules/
+dist/
+dev-dist/
+*.tsbuildinfo
+coverage/
+
+# Variables de entorno: NUNCA se commitean
+.env
+.env.*
+!.env.example
+
+# Supabase CLI local
+supabase/.branches/
+supabase/.temp/
+
+# Editor / sistema
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.log

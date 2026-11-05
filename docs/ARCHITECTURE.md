@@ -40,7 +40,10 @@
 | `src/core/stats/` | Agregados semanales/mensuales, racha, consistencia | — |
 | `src/core/sync/` | Cola de sincronización, fusión de cambios, conflictos | — |
 | `src/lib/sync/` | Adaptador Supabase de la cola | core/sync |
-| `src/features/*` | Pantallas por módulo (siguiente etapa) | core, lib |
+| `src/app/` | Rutas, layout, auth y proveedor de datos (IndexedDB + sincronización) | core, lib |
+| `src/lib/db/` | Base IndexedDB por usuario (Dexie) y repositorio: escribe local + encola en la misma transacción | core/sync |
+| `src/lib/sync/engine.ts` | Ciclo de sincronización en la app: sube la cola, descarga por `updated_at`, estado para la UI | core/sync, lib/sync |
+| `src/features/*` | Pantallas por módulo | core, lib |
 | `supabase/` | Migraciones, catálogo, Edge Functions | — |
 
 `src/core` no importa React, Dexie ni Supabase: es TypeScript puro, testeable y reutilizable.
@@ -102,8 +105,8 @@ Reglas en `src/core/planning/rules.ts`; cada una tiene un test:
 | Fase | Contenido | Estado |
 |---|---|---|
 | 0 | Núcleo de dominio + datos + base de datos + tests | ✅ |
-| 1 | Shell de la app: navegación, diseño, IndexedDB, auth, onboarding, perfil, dashboard | Siguiente |
-| 2 | Biblioteca, generador de planes, calendario, sesión de fuerza con temporizador, historial | |
+| 1 | Shell de la app: navegación, diseño, IndexedDB, auth, onboarding, perfil, dashboard | ✅ |
+| 2 | Biblioteca, generador de planes, calendario, sesión de fuerza con temporizador, historial | Siguiente |
 | 3 | Running: cronómetro, GPS + mapa, manual, parciales, estadísticas | |
 | 4 | Nutrición: buscador, registro por comida, agua, objetivos, comidas frecuentes | |
 | 5 | Progreso: peso, medidas, fotos privadas, gráficos, "Antes y después" | |
