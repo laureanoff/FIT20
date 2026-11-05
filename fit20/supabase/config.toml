@@ -1,0 +1,30 @@
+# Configuración del CLI de Supabase para el proyecto NUEVO de FIT 20.
+# project_id se completa con `supabase link --project-ref <ref>` (ver SETUP.md).
+project_id = "fit20"
+
+[api]
+schemas = ["public"]
+max_rows = 1000
+
+[auth]
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["http://localhost:5173", "https://fit20.vercel.app"]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = true
+secure_password_change = true
+
+[auth.password]
+min_length = 8
+
+[storage]
+file_size_limit = "10MiB"
+
+[functions.delete-account]
+verify_jwt = true
+
+[functions.ai-coach]
+verify_jwt = true

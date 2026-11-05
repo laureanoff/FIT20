@@ -1,0 +1,3 @@
+-- El catálogo de ejercicios y alimentos está en la migración 20261105000300_seed_catalog.sql
+-- (las migraciones se aplican también en proyectos remotos; seed.sql solo en desarrollo local).
+-- No se cargan datos de usuarios de demostración: FIT 20 no mezcla datos ficticios con datos reales.

@@ -1,0 +1,20 @@
+{
+  "//": "Typecheck del núcleo de dominio (sin React ni dependencias de terceros). Se usa en CI y en entornos sin node_modules completos.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "isolatedModules": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": []
+  },
+  "include": ["src/core/**/*.ts", "src/data/**/*.ts", "src/types/**/*.ts", "src/lib/sync/**/*.ts"]
+}
