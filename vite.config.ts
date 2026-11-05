@@ -29,7 +29,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'prompt',
       injectRegister: false,
-      includeAssets: ['icons/*.png', 'icons/*.svg', 'offline.html'],
+      includeAssets: ['icons/*.png', 'logo.png'],
       manifest: {
         name: 'FIT 20',
         short_name: 'FIT 20',

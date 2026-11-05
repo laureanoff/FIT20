@@ -10,7 +10,7 @@
   --c-ink: #f3f2ee;
   --c-muted: #9b9a94;
   --c-faint: #6b6a65;
-  --c-accent: #d7ff3c;
+  --c-accent: #d4fc21;
   --c-accent-ink: #111111;
   --c-ok: #43d6a0;
   --c-warn: #ffb547;
@@ -104,4 +104,9 @@ input[type='date'] {
 }
 .leaflet-control-attribution {
   font-size: 10px;
+}
+
+/* El lima del logo no contrasta sobre fondo claro: versión oscura para el texto. */
+[data-theme='light'] .wm-fit {
+  color: #5f7d00;
 }

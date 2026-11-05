@@ -165,12 +165,19 @@ export function Spinner({ label = 'Cargando…' }: { label?: string }) {
   );
 }
 
+/** Marca FIT20 con los colores del logo: "FIT" en lima y "20" en el color del texto, en cursiva pesada. */
 export function Wordmark({ className }: { className?: string }) {
   return (
-    <span className={cx('inline-flex items-baseline gap-1 font-black tracking-tight', className)}>
-      FIT<span className="rounded-md bg-accent px-1.5 text-accent-ink">20</span>
+    <span className={cx('inline-flex items-baseline font-black tracking-tight italic', className)} aria-label="FIT20">
+      <span className="wm-fit text-accent">FIT</span>
+      <span>20</span>
     </span>
   );
+}
+
+/** Logo completo (pantallas de bienvenida). */
+export function Logo({ className }: { className?: string }) {
+  return <img src="/logo.png" alt="FIT20" width={640} height={640} className={cx('rounded-3xl', className)} />;
 }
 
 export function ErrorBox({ children }: { children: ReactNode }) {

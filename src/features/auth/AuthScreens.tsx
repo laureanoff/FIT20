@@ -1,7 +1,7 @@
 import { MailCheck, WifiOff } from 'lucide-react';
 import { type FormEvent, type ReactNode, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Button, ErrorBox, Field, Wordmark } from '@/components/ui';
+import { Button, ErrorBox, Field, Logo } from '@/components/ui';
 import { authErrorMessage, useAuth } from '@/app/auth';
 import { useOnline } from '@/app/data';
 import { backendMissing, supabase } from '@/lib/supabase';
@@ -12,8 +12,8 @@ function AuthLayout({ title, subtitle, children, footer }: { title: string; subt
   const online = useOnline();
   return (
     <main className="pt-safe pb-safe mx-auto flex min-h-dvh w-full max-w-md flex-col px-5">
-      <div className="pt-10 pb-8">
-        <Wordmark className="text-[28px]" />
+      <div className="flex justify-center pt-6 pb-2">
+        <Logo className="size-40" />
       </div>
       <h1 className="text-[28px] leading-tight font-bold tracking-tight">{title}</h1>
       {subtitle && <p className="mt-2 text-[15px] text-muted">{subtitle}</p>}
