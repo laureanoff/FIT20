@@ -10,10 +10,11 @@ PWA instalable en iPhone y Android · React + TypeScript + Vite · Supabase · I
 |---|---|
 | Núcleo de dominio (motor de planes, nutrición, temporizadores, running, sincronización) | ✅ Implementado y testeado |
 | Biblioteca de 106 ejercicios · base de 100 alimentos argentinos | ✅ |
-| Base de datos: esquema, RLS, Storage privado, catálogo | ✅ Migraciones verificadas en Postgres |
-| Edge Functions (eliminar cuenta, asistente IA opcional) | ✅ Escritas · pendiente de deploy |
+| Base de datos: esquema, RLS, Storage privado, catálogo | ✅ Aplicada en el proyecto Supabase `fit20` |
+| Edge Functions (eliminar cuenta, asistente IA opcional) | ✅ Desplegadas |
 | Interfaz (pantallas, navegación, PWA, IndexedDB) | 🚧 Siguiente etapa |
-| Proyectos Supabase / GitHub / Vercel nuevos | ⏳ Ver [SETUP.md](SETUP.md) |
+| Supabase `fit20` (São Paulo) | ✅ Creado y configurado |
+| GitHub / Vercel nuevos | ⏳ Ver [SETUP.md](SETUP.md) |
 
 Detalle de arquitectura, decisiones y plan: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

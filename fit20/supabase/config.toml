@@ -1,6 +1,6 @@
 # Configuración del CLI de Supabase para el proyecto NUEVO de FIT 20.
 # project_id se completa con `supabase link --project-ref <ref>` (ver SETUP.md).
-project_id = "fit20"
+project_id = "krlhvdrrjqioohucqmfz"
 
 [api]
 schemas = ["public"]

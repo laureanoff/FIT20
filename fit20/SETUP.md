@@ -29,6 +29,8 @@ Comprobá que en GitHub **no** aparezca ningún archivo `.env`.
 
 ## 2. Proyecto de Supabase
 
+> ✅ **Hecho (5/11/2026):** proyecto `fit20`, ref `krlhvdrrjqioohucqmfz`, región São Paulo, organización Invictus. Migraciones 001–004 aplicadas, catálogo cargado (106 ejercicios, 100 alimentos), Edge Functions `delete-account` y `ai-coach` desplegadas, 0 alertas del Security Advisor. Los pasos 2 a 4, 6 y 7 ya están completos; queda el paso 5 (URLs de autenticación) cuando exista el dominio de Vercel.
+
 1. Entrá a <https://supabase.com/dashboard> → *New project*.
 2. **Organization:** la que corresponda (con plan gratuito se permiten 2 proyectos activos).
 3. **Name:** `fit20`.
