@@ -16,7 +16,8 @@ PWA instalable en iPhone y Android · React + TypeScript + Vite · Supabase · I
 | Fase 2: biblioteca, generador de planes, calendario, sesión de fuerza con temporizador, historial | ✅ |
 | Fase 3: running con GPS, mapa, registro manual, parciales y marcas | ✅ |
 | Fase 4: nutrición (buscador, porciones, agua, objetivos, comidas guardadas, alimentos propios) | ✅ |
-| Fase 5: progreso (peso, medidas, fotos) | 🚧 Siguiente etapa |
+| Fase 5: progreso (peso, medidas, fotos privadas, gráficos, antes y después) | ✅ |
+| Plan de alimentación según el objetivo | 🚧 En curso |
 | Supabase `fit20` (São Paulo) | ✅ Creado y configurado |
 | GitHub (`laureanoff/FIT20`) | ✅ |
 | Vercel (https://fit20.vercel.app) | ✅ |

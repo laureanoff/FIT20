@@ -204,6 +204,43 @@ export interface WaterLog extends Synced {
   logged_at: string;
 }
 
+// ───────── Progreso ─────────
+
+export interface BodyMeasurement extends Synced {
+  user_id: string;
+  measured_on: string;
+  weight_kg: number | null;
+  waist_cm: number | null;
+  hip_cm: number | null;
+  chest_cm: number | null;
+  arm_cm: number | null;
+  thigh_cm: number | null;
+  notes: string | null;
+}
+
+export type Pose = 'front' | 'side' | 'back' | 'other';
+
+export interface ProgressPhoto extends Synced {
+  user_id: string;
+  storage_path: string;
+  photo_date: string;
+  pose: Pose | null;
+  notes: string | null;
+}
+
+/**
+ * Archivo de la foto en el dispositivo (nunca se sincroniza como registro): sirve para verla sin
+ * conexión y como cola de subida/borrado al bucket privado.
+ */
+export interface PhotoBlob {
+  id: string;
+  storage_path: string;
+  blob: Blob | null;
+  /** 'pending' = falta subir; 'synced' = ya está en la nube; 'delete' = falta borrar de la nube. */
+  state: 'pending' | 'synced' | 'delete';
+  error?: string | null;
+}
+
 export type L<T> = T & LocalMeta;
 export type LocalProfile = L<Profile>;
 export type LocalSettings = L<UserSettings>;
@@ -239,6 +276,9 @@ export class Fit20DB extends Dexie {
   food_logs!: Table<L<FoodLog>, string>;
   saved_meals!: Table<L<SavedMeal>, string>;
   water_logs!: Table<L<WaterLog>, string>;
+  body_measurements!: Table<L<BodyMeasurement>, string>;
+  progress_photos!: Table<L<ProgressPhoto>, string>;
+  photo_blobs!: Table<PhotoBlob, string>;
   outbox!: Table<SyncOperation, string>;
   conflicts!: Table<StoredConflict, number>;
   meta!: Table<MetaEntry, string>;
@@ -272,6 +312,11 @@ export class Fit20DB extends Dexie {
       saved_meals: 'id',
       water_logs: 'id, log_date',
     });
+    this.version(5).stores({
+      body_measurements: 'id, measured_on',
+      progress_photos: 'id, photo_date',
+      photo_blobs: 'id, state',
+    });
   }
 }
 
@@ -292,6 +337,8 @@ export const LOCAL_ENTITIES = [
   'food_logs',
   'saved_meals',
   'water_logs',
+  'body_measurements',
+  'progress_photos',
 ] as const;
 export type LocalEntity = (typeof LOCAL_ENTITIES)[number];
 

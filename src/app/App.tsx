@@ -6,6 +6,7 @@ import { DashboardScreen } from '@/features/dashboard/DashboardScreen';
 import { OnboardingScreen } from '@/features/onboarding/OnboardingScreen';
 import { ProfileEditScreen, ProfileScreen } from '@/features/profile/ProfileScreen';
 import { AddFoodScreen, CustomFoodScreen, EditFoodLogScreen, NutritionScreen, TargetsScreen } from '@/features/nutrition/NutritionScreens';
+import { CompareScreen, MeasureScreen, NewPhotoScreen, PhotoScreen, ProgressScreen } from '@/features/progress/ProgressScreens';
 import { LiveRunScreen } from '@/features/running/LiveRunScreen';
 import { ManualRunScreen, RunDetailScreen, RunningHome } from '@/features/running/RunningScreens';
 import { DayScreen } from '@/features/training/DayScreen';
@@ -15,7 +16,7 @@ import { PlanBuilderScreen } from '@/features/training/PlanBuilderScreen';
 import { SessionScreen } from '@/features/training/SessionScreen';
 import { TrainScreen } from '@/features/training/TrainScreen';
 import { backendMissing } from '@/lib/supabase';
-import { AppLayout, ComingSoon, SECTIONS } from './AppLayout';
+import { AppLayout } from './AppLayout';
 import { AuthProvider, useAuth } from './auth';
 import { DataProvider, useData } from './data';
 
@@ -110,7 +111,11 @@ function UserGate() {
         <Route path="nutricion/registro/:id" element={<EditFoodLogScreen />} />
         <Route path="nutricion/alimento-nuevo" element={<CustomFoodScreen />} />
         <Route path="nutricion/objetivos" element={<TargetsScreen />} />
-        <Route path="progreso" element={<ComingSoon {...SECTIONS.progress} />} />
+        <Route path="progreso" element={<ProgressScreen />} />
+        <Route path="progreso/medir" element={<MeasureScreen />} />
+        <Route path="progreso/foto-nueva" element={<NewPhotoScreen />} />
+        <Route path="progreso/foto/:id" element={<PhotoScreen />} />
+        <Route path="progreso/comparar" element={<CompareScreen />} />
         <Route path="perfil" element={<ProfileScreen />} />
         <Route path="perfil/:section" element={<ProfileEditScreen />} />
       </Route>

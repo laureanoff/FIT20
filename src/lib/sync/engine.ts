@@ -3,6 +3,7 @@ import { processQueue, pruneSynced, queueStats, recoverInterrupted, resolvePulle
 import type { ServerRecord } from '@/core/sync/types';
 import { type Fit20DB, LOCAL_ENTITIES, type LocalEntity, getMeta, setMeta, tableFor } from '@/lib/db/database';
 import { markApplied, outboxStore, replaceWithServer } from '@/lib/db/repository';
+import { syncPhotoFiles } from './photos';
 import { SupabaseRemote, type SupabaseLike } from './supabase-remote';
 
 export type SyncState = 'no-backend' | 'offline' | 'syncing' | 'pending' | 'error' | 'synced';
@@ -129,7 +130,15 @@ export class SyncEngine {
         },
         Date.now,
       );
-      if (!summary.stopped_offline) await this.pull();
+      if (!summary.stopped_offline) {
+        await this.pull();
+        // Fotos de progreso: archivos aparte de la cola de registros.
+        try {
+          await syncPhotoFiles(this.db, this.client);
+        } catch {
+          /* se reintenta en el próximo ciclo */
+        }
+      }
       await pruneSynced(store, Date.now());
       const lastError = summary.failed ? ((await store.list()).find((o) => o.status === 'error')?.last_error ?? null) : null;
       this.set({ lastSyncAt: summary.stopped_offline ? this.snapshot.lastSyncAt : Date.now(), lastError });
@@ -171,7 +180,8 @@ export class SyncEngine {
 
   async refreshCounts(): Promise<void> {
     const s = await queueStats(outboxStore(this.db));
-    const pending = s.pending + s.syncing;
+    const photos = await this.db.photo_blobs.where('state').anyOf('pending', 'delete').count();
+    const pending = s.pending + s.syncing + photos;
     let state: SyncState;
     if (!this.client) state = 'no-backend';
     else if (!navigator.onLine) state = 'offline';
