@@ -108,7 +108,7 @@ Reglas en `src/core/planning/rules.ts`; cada una tiene un test:
 | 1 | Shell de la app: navegación, diseño, IndexedDB, auth, onboarding, perfil, dashboard | ✅ |
 | 2 | Biblioteca, generador de planes, calendario, sesión de fuerza con temporizador, historial | ✅ |
 | 3 | Running: cronómetro, GPS + mapa, manual, parciales, estadísticas | ✅ |
-| 4 | Nutrición: buscador, registro por comida, agua, objetivos, comidas frecuentes | |
+| 4 | Nutrición: buscador, registro por comida, agua, objetivos, comidas frecuentes | ✅ |
 | 5 | Progreso: peso, medidas, fotos privadas, gráficos, "Antes y después" | |
 | 6 | Conexión a Supabase nuevo, sincronización en la app, indicador de estado | |
 | 7 | PWA (instalación iPhone), pruebas end-to-end, deploy en Vercel | |

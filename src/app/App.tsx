@@ -5,6 +5,7 @@ import { LoginScreen, NewPasswordScreen, RecoverScreen, SignupScreen } from '@/f
 import { DashboardScreen } from '@/features/dashboard/DashboardScreen';
 import { OnboardingScreen } from '@/features/onboarding/OnboardingScreen';
 import { ProfileEditScreen, ProfileScreen } from '@/features/profile/ProfileScreen';
+import { AddFoodScreen, CustomFoodScreen, EditFoodLogScreen, NutritionScreen, TargetsScreen } from '@/features/nutrition/NutritionScreens';
 import { LiveRunScreen } from '@/features/running/LiveRunScreen';
 import { ManualRunScreen, RunDetailScreen, RunningHome } from '@/features/running/RunningScreens';
 import { DayScreen } from '@/features/training/DayScreen';
@@ -104,7 +105,11 @@ function UserGate() {
         <Route path="running/en-curso" element={<LiveRunScreen />} />
         <Route path="running/manual" element={<ManualRunScreen />} />
         <Route path="running/:id" element={<RunDetailScreen />} />
-        <Route path="nutricion" element={<ComingSoon {...SECTIONS.food} />} />
+        <Route path="nutricion" element={<NutritionScreen />} />
+        <Route path="nutricion/agregar" element={<AddFoodScreen />} />
+        <Route path="nutricion/registro/:id" element={<EditFoodLogScreen />} />
+        <Route path="nutricion/alimento-nuevo" element={<CustomFoodScreen />} />
+        <Route path="nutricion/objetivos" element={<TargetsScreen />} />
         <Route path="progreso" element={<ComingSoon {...SECTIONS.progress} />} />
         <Route path="perfil" element={<ProfileScreen />} />
         <Route path="perfil/:section" element={<ProfileEditScreen />} />

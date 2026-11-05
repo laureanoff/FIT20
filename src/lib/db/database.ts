@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { DayStatus, PlanInput, PlanStatus, PlannedDay, Profile, SessionType } from '@/types/domain';
+import type { DayStatus, MealType, PlanInput, PlanStatus, PlannedDay, Profile, SessionType } from '@/types/domain';
 import type { ConflictEvent, SyncOperation } from '@/core/sync/types';
 
 /**
@@ -152,6 +152,58 @@ export interface LivePoint {
   segment: number;
 }
 
+// ───────── Nutrición ─────────
+
+/** Alimento propio del usuario (los globales viven en src/data/foods). */
+export interface CustomFood extends Synced {
+  owner_id: string | null;
+  name: string;
+  brand: string | null;
+  category: string;
+  state: 'raw' | 'cooked' | 'na';
+  kcal: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  portions: Record<string, number>;
+  is_liquid: boolean;
+}
+
+export interface FoodLog extends Synced {
+  user_id: string;
+  food_item_id: string;
+  log_date: string;
+  meal_type: MealType;
+  quantity: number;
+  unit: string;
+  grams: number;
+  food_name: string;
+  calories: number;
+  protein: number;
+  carbohydrates: number;
+  fats: number;
+  logged_at: string;
+}
+
+export interface SavedMealItem {
+  food_item_id: string;
+  quantity: number;
+  unit: string;
+}
+
+export interface SavedMeal extends Synced {
+  user_id: string;
+  name: string;
+  items: SavedMealItem[];
+}
+
+export interface WaterLog extends Synced {
+  user_id: string;
+  log_date: string;
+  quantity_ml: number;
+  logged_at: string;
+}
+
 export type L<T> = T & LocalMeta;
 export type LocalProfile = L<Profile>;
 export type LocalSettings = L<UserSettings>;
@@ -183,6 +235,10 @@ export class Fit20DB extends Dexie {
   running_splits!: Table<L<RunningSplit>, string>;
   running_tracks!: Table<L<RunningTrack>, string>;
   live_points!: Table<LivePoint, number>;
+  food_items!: Table<L<CustomFood>, string>;
+  food_logs!: Table<L<FoodLog>, string>;
+  saved_meals!: Table<L<SavedMeal>, string>;
+  water_logs!: Table<L<WaterLog>, string>;
   outbox!: Table<SyncOperation, string>;
   conflicts!: Table<StoredConflict, number>;
   meta!: Table<MetaEntry, string>;
@@ -210,6 +266,12 @@ export class Fit20DB extends Dexie {
       running_tracks: 'id, session_id',
       live_points: '++seq',
     });
+    this.version(4).stores({
+      food_items: 'id, owner_id',
+      food_logs: 'id, log_date, food_item_id',
+      saved_meals: 'id',
+      water_logs: 'id, log_date',
+    });
   }
 }
 
@@ -217,6 +279,7 @@ export class Fit20DB extends Dexie {
 export const LOCAL_ENTITIES = [
   'profiles',
   'user_settings',
+  'food_items',
   'exercise_favorites',
   'training_plans',
   'training_days',
@@ -226,6 +289,9 @@ export const LOCAL_ENTITIES = [
   'running_sessions',
   'running_splits',
   'running_tracks',
+  'food_logs',
+  'saved_meals',
+  'water_logs',
 ] as const;
 export type LocalEntity = (typeof LOCAL_ENTITIES)[number];
 

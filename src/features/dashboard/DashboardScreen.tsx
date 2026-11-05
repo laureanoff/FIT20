@@ -8,6 +8,7 @@ import { addDays, localToday, startOfWeek, weekday } from '@/core/utils/date';
 import { energyFor } from '@/features/profile/energy';
 import { useOpenWorkout, useTodayDay } from '@/features/training/hooks';
 import { SESSION_LABELS } from '@/features/training/format';
+import { useDayLog, useTargets } from '@/features/nutrition/hooks';
 
 const kg = (n: number) => `${n.toLocaleString('es-AR', { maximumFractionDigits: 1 })} kg`;
 
@@ -72,49 +73,8 @@ export function DashboardScreen() {
         </p>
       </Card>
 
-      {/* Energía */}
-      {energy.status === 'ok' ? (
-        <Card>
-          <SectionTitle>Referencia diaria</SectionTitle>
-          <p className="flex items-baseline gap-2">
-            <span className="num text-[36px] leading-none font-bold">{energy.target_kcal.toLocaleString('es-AR')}</span>
-            <span className="text-muted">kcal</span>
-          </p>
-          {energy.target_range && (
-            <p className="mt-1 text-[13px] text-muted">
-              Rango estimado {energy.target_range[0].toLocaleString('es-AR')}–{energy.target_range[1].toLocaleString('es-AR')} kcal
-            </p>
-          )}
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            {[
-              ['Proteína', energy.protein_g],
-              ['Carbos', energy.carbs_g],
-              ['Grasas', energy.fat_g],
-            ].map(([k, v]) => (
-              <div key={k} className="rounded-2xl bg-raised p-3">
-                <div className="num text-[18px] font-semibold">
-                  {v}
-                  <span className="text-[13px] font-normal text-muted"> g</span>
-                </div>
-                <div className="text-[12px] text-muted">{k}</div>
-              </div>
-            ))}
-          </div>
-          <p className="mt-3 flex items-center gap-2 text-[14px] text-muted">
-            <Droplets className="size-4 text-accent" aria-hidden /> Agua: {(energy.water_ml / 1000).toLocaleString('es-AR', { maximumFractionDigits: 1 })} L por día
-          </p>
-        </Card>
-      ) : (
-        <Card>
-          <SectionTitle>Referencia diaria</SectionTitle>
-          <p className="text-[14px] text-muted">
-            Para estimarla nos falta: {energy.missing.join(', ')}.{' '}
-            <Link to="/perfil" className="text-ink underline underline-offset-4">
-              Completar perfil
-            </Link>
-          </p>
-        </Card>
-      )}
+      {/* Nutrición de hoy */}
+      <TodayNutrition missing={energy.status === 'ok' ? null : energy.missing} />
 
       {/* Peso y objetivo */}
       <Card>
@@ -196,5 +156,44 @@ function TodayHero({ trainsToday, sessionMinutes }: { trainsToday: boolean; sess
         {cta.label} <ArrowRight className="size-4" aria-hidden />
       </Link>
     </section>
+  );
+}
+
+function TodayNutrition({ missing }: { missing: string[] | null }) {
+  const day = useDayLog(localToday());
+  const targets = useTargets();
+  if (!targets) {
+    return (
+      <Card>
+        <SectionTitle>Nutrición de hoy</SectionTitle>
+        <p className="text-[14px] text-muted">
+          {missing ? `Para estimar tu referencia nos falta: ${missing.join(', ')}. ` : ''}
+          <Link to="/perfil" className="text-ink underline underline-offset-4">
+            Completar perfil
+          </Link>
+        </p>
+      </Card>
+    );
+  }
+  const kcal = day?.totals.kcal ?? 0;
+  const water = day?.water_ml ?? 0;
+  const pct = Math.min(100, (kcal / targets.kcal) * 100);
+  return (
+    <Link to="/nutricion" className="block rounded-3xl border border-line bg-surface p-5">
+      <SectionTitle action={<ArrowRight className="size-4 text-muted" aria-hidden />}>Nutrición de hoy</SectionTitle>
+      <p className="flex items-baseline gap-2">
+        <span className="num text-[32px] leading-none font-bold">{kcal.toLocaleString('es-AR')}</span>
+        <span className="text-muted">/ {targets.kcal.toLocaleString('es-AR')} kcal</span>
+      </p>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-raised">
+        <div className={cx('h-full rounded-full', kcal > targets.kcal ? 'bg-warn' : 'bg-accent')} style={{ width: `${pct}%` }} />
+      </div>
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-muted">
+        <span>Proteína {Math.round(day?.totals.protein ?? 0)}/{targets.protein} g</span>
+        <span className="inline-flex items-center gap-1">
+          <Droplets className="size-3.5" aria-hidden /> {(water / 1000).toLocaleString('es-AR', { maximumFractionDigits: 2 })}/{(targets.water_ml / 1000).toLocaleString('es-AR', { maximumFractionDigits: 1 })} L
+        </span>
+      </div>
+    </Link>
   );
 }
