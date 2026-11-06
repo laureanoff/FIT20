@@ -3,7 +3,7 @@ import { Flag, LocateFixed, LocateOff, Map as MapIcon, Pause, Play, Square, Tras
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { Button, ErrorBox, Spinner, cx } from '@/components/ui';
+import { Button, ErrorBox, Spinner, Toggle, cx } from '@/components/ui';
 import { useData } from '@/app/data';
 import { accumulateTrack, computeSplits, formatPace, paceSecPerKm } from '@/core/running/track';
 import type { CardioActivity } from '@/types/domain';
@@ -14,6 +14,7 @@ import { beep, primeAudio, useWakeLock } from '@/features/training/useRestTimer'
 import { type ActiveRun, RunTooShortError, addLivePoint, discardRun, finishRun, getActiveRun, maxSpeedFor, pauseRun, prepareRun, setRunActivity, startRun, toGps } from './actions';
 import { WeatherCard } from '@/features/weather/WeatherCard';
 import { rememberLocation } from '@/features/weather/store';
+import { lockScreenActive, lockScreenEnabled, lockScreenSupported, setLockScreenEnabled, startLockScreen, stopLockScreen, updateLockScreen } from './lockscreen';
 import { ACTIVITIES, ACTIVITY_ICON, ACTIVITY_LABEL, ACTIVITY_NOUN, fmtSpeed, usesSpeed } from './activity';
 
 const RouteMap = lazy(() => import('./RouteMap'));
@@ -51,6 +52,25 @@ export function LiveRunScreen() {
   const [finishing, setFinishing] = useState(false);
   const runRef = useRef<ActiveRun | null>(null);
   runRef.current = run;
+  const [lockOn, setLockOn] = useState(lockScreenEnabled);
+  const [, bumpLock] = useState(0);
+  const showOnLock = () => void startLockScreen(lockHandlers).then(() => bumpLock((n) => n + 1));
+
+  // Pausa / reanudar desde la pantalla de bloqueo.
+  const lockHandlers = useMemo(
+    () => ({
+      onPause: () => {
+        const r = runRef.current;
+        if (r?.stopwatch.status === 'running') void pauseRun(db, r).then(setRun);
+      },
+      onResume: () => {
+        const r = runRef.current;
+        if (r && r.stopwatch.status === 'paused') void startRun(db, r).then(setRun);
+      },
+    }),
+    [db],
+  );
+  useEffect(() => () => stopLockScreen(), []);
 
   // Cargar (o preparar) la carrera activa: sobrevive a recargas y cierres de la app.
   useEffect(() => {
@@ -120,6 +140,25 @@ export function LiveRunScreen() {
   const pace = currentPace(track.accepted, track.cumulative_m);
   const avg = paceSecPerKm(track.distance_m / 1000, elapsed / 1000);
 
+  // Panel de la pantalla de bloqueo: se actualiza con cada segundo / metro.
+  const lockSecond = Math.floor(elapsed / 1000);
+  useEffect(() => {
+    if (!run || run.stopwatch.status === 'idle' || !lockScreenActive()) return;
+    const a = run.activity ?? 'run';
+    const ref = pace ?? avg;
+    const rate = usesSpeed(a) ? (ref ? `${fmtSpeed(3600 / ref)} km/h` : null) : ref ? `${formatPace(ref)}/km` : null;
+    updateLockScreen({
+      activityLabel: ACTIVITY_LABEL[a],
+      distanceKm: track.distance_m / 1000,
+      elapsedMs: elapsed,
+      rate,
+      running: run.stopwatch.status === 'running',
+      targetKm: run.target_distance_km,
+      targetSeconds: run.target_duration_seconds,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [run, lockSecond, track.distance_m]);
+
   // Aviso en cada kilómetro.
   const lastSplits = useRef(0);
   useEffect(() => {
@@ -146,9 +185,11 @@ export function LiveRunScreen() {
         onBack={() => setFinishing(false)}
         onSave={async (rpe, notes) => {
           const id = await finishRun(ctx, run, { rpe, notes });
+          stopLockScreen();
           navigate(`/running/${id}`, { replace: true });
         }}
         onDiscard={async () => {
+          stopLockScreen();
           await discardRun(db);
           navigate('/running', { replace: true });
         }}
@@ -226,7 +267,9 @@ export function LiveRunScreen() {
       {gps.kind === 'unavailable' && <p className="rounded-2xl bg-warn/12 px-4 py-3 text-[14px] text-warn">{gps.message}</p>}
       {idle && (
         <p className="text-center text-[13px] text-muted">
-          Mantené la app abierta y la pantalla encendida: en iPhone el GPS se detiene si la app pasa a segundo plano.
+          {lockOn && lockScreenSupported()
+            ? 'Con el celu bloqueado el tiempo sigue contando. En iPhone y algunos Android el GPS se pausa mientras está bloqueado: ese tramo se suma en línea recta al desbloquear.'
+            : 'Mantené la app abierta y la pantalla encendida: en iPhone el GPS se detiene si la app pasa a segundo plano.'}
         </p>
       )}
 
@@ -237,6 +280,7 @@ export function LiveRunScreen() {
             type="button"
             onClick={() => {
               primeAudio();
+              if (lockOn) showOnLock();
               void startRun(db, run).then(setRun);
             }}
             className="grid size-24 place-items-center rounded-full bg-accent text-accent-ink shadow-lg active:scale-95"
@@ -250,7 +294,13 @@ export function LiveRunScreen() {
           </button>
         ) : (
           <>
-            <button type="button" onClick={() => void startRun(db, run).then(setRun)} className="grid size-20 place-items-center rounded-full bg-accent text-accent-ink active:scale-95" aria-label="Reanudar">
+            <button
+              type="button"
+              onClick={() => {
+                if (lockOn && !lockScreenActive()) showOnLock();
+                void startRun(db, run).then(setRun);
+              }}
+              className="grid size-20 place-items-center rounded-full bg-accent text-accent-ink active:scale-95" aria-label="Reanudar">
               <Play className="size-8 fill-current" />
             </button>
             <button type="button" onClick={() => setFinishing(true)} className="grid size-20 place-items-center rounded-full bg-danger text-bg active:scale-95" aria-label="Terminar">
@@ -260,6 +310,25 @@ export function LiveRunScreen() {
         )}
       </div>
       {!idle && !running && <p className="text-center text-[13px] font-semibold text-warn">En pausa: no se suma distancia ni tiempo.</p>}
+      {idle && lockScreenSupported() && (
+        <div className="rounded-3xl border border-line bg-surface px-4 py-1">
+          <Toggle
+            label="Ver en la pantalla bloqueada"
+            description="Km, tiempo y ritmo con el celu bloqueado, y pausa sin desbloquear. Si escuchás música en otra app, puede pausarla."
+            checked={lockOn}
+            onChange={(v) => {
+              setLockOn(v);
+              setLockScreenEnabled(v);
+            }}
+          />
+        </div>
+      )}
+      {!idle && !running && lockScreenActive() && <p className="text-center text-[13px] text-muted">También podés reanudar desde la pantalla bloqueada.</p>}
+      {running && lockOn && lockScreenSupported() && !lockScreenActive() && (
+        <button type="button" onClick={showOnLock} className="inline-flex min-h-11 items-center justify-center self-center rounded-full bg-raised px-4 text-[14px]">
+          Mostrar en la pantalla bloqueada
+        </button>
+      )}
       {idle && <WeatherCard activity={act} compact showPrompt={false} />}
 
       {!idle && (
