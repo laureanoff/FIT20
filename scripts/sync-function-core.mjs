@@ -3,7 +3,7 @@
 import { copyFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-export const FUNCTION_CORE = ['notify/compose.ts', 'weather/weather.ts'];
+export const FUNCTION_CORE = ['notify/compose.ts', 'notify/live.ts', 'weather/weather.ts'];
 
 for (const f of FUNCTION_CORE) {
   const to = `supabase/functions/send-reminders/core/${f}`;

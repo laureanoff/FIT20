@@ -8,6 +8,7 @@ import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import webpush from 'npm:web-push@3.6.7';
 import { composeReminder, isDue, localParts, type DayInfo, type Message, type ReminderKind } from './core/notify/compose.ts';
 import { forecastAt, openMeteoUrl, parseOpenMeteo, type Forecast } from './core/weather/weather.ts';
+import { composeLive, type LiveState } from './core/notify/live.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') ?? '*',
@@ -109,13 +110,13 @@ async function weatherFor(p: Prefs | null, date: string, time: string): Promise<
 }
 
 /** Manda a todos los dispositivos del usuario; borra las suscripciones vencidas. Devuelve cuántos recibieron. */
-async function deliver(admin: SupabaseClient, userId: string, msg: Message): Promise<number> {
+async function deliver(admin: SupabaseClient, userId: string, msg: Message, ttl = 6 * 60 * 60): Promise<number> {
   const { data: subs } = await admin.from('push_subscriptions').select('id, endpoint, p256dh, auth, failures').eq('user_id', userId);
   let ok = 0;
   await Promise.all(
     ((subs ?? []) as Sub[]).map(async (s) => {
       try {
-        await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify(msg), { TTL: 6 * 60 * 60, urgency: 'normal', topic: msg.tag.slice(0, 32) });
+        await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify(msg), { TTL: ttl, urgency: ttl < 600 ? 'high' : 'normal', topic: msg.tag.slice(0, 32) });
         ok++;
         await admin.from('push_subscriptions').update({ failures: 0, last_success_at: new Date().toISOString() }).eq('id', s.id);
       } catch (e) {
@@ -154,6 +155,35 @@ async function runSchedule(admin: SupabaseClient, now: Date) {
   return { checked, sent };
 }
 
+/** Salidas en curso: notificación "en vivo" para cada una que le toque. */
+async function runLive(admin: SupabaseClient, now: Date) {
+  const { data, error } = await admin.from('live_sessions').select('*').lte('next_push_at', now.toISOString());
+  if (error) throw error;
+  let sent = 0;
+  for (const r of data ?? []) {
+    // Salida abandonada (el teléfono no avisa hace más de 6 h): se descarta.
+    if (now.getTime() - new Date(r.updated_at).getTime() > 6 * 60 * 60 * 1000) {
+      await admin.from('live_sessions').delete().eq('user_id', r.user_id);
+      continue;
+    }
+    const state: LiveState = {
+      activity: r.activity,
+      status: r.status,
+      elapsed_s: Number(r.elapsed_s),
+      updated_at: r.updated_at,
+      distance_km: Number(r.distance_km),
+      pace_s_per_km: r.pace_s_per_km === null ? null : Number(r.pace_s_per_km),
+      target_km: r.target_km === null ? null : Number(r.target_km),
+    };
+    // En pausa se avisa una vez y se espera a que el teléfono la reanude.
+    // 20 s de margen: el envío corre cada minuto en punto y no debe saltearse una vuelta.
+    const next = state.status === 'running' ? new Date(now.getTime() + Number(r.interval_min) * 60_000 - 20_000).toISOString() : null;
+    await admin.from('live_sessions').update({ next_push_at: next }).eq('user_id', r.user_id);
+    sent += await deliver(admin, r.user_id, composeLive(state, now), 90);
+  }
+  return { live: data?.length ?? 0, sent };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json(405, { error: 'Método no permitido' });
@@ -172,7 +202,9 @@ Deno.serve(async (req) => {
   const cronHeader = req.headers.get('x-cron-secret');
   if (cronHeader) {
     if (cronHeader !== config.cron_secret) return json(401, { error: 'No autorizado' });
+    const cronBody = await req.json().catch(() => ({}));
     try {
+      if (cronBody?.mode === 'live') return json(200, await runLive(admin, new Date()));
       return json(200, await runSchedule(admin, new Date()));
     } catch (e) {
       console.error(e);
@@ -185,6 +217,13 @@ Deno.serve(async (req) => {
   const { data: { user } } = await userClient.auth.getUser();
   if (!user) return json(401, { error: 'Sesión inválida' });
   const body = await req.json().catch(() => ({}));
+  if (body?.mode === 'live-test') {
+    // Ejemplo de la notificación en vivo: 25 min de running, 4,1 km medidos y 2 min con el celu bloqueado.
+    const now = new Date();
+    const sample: LiveState = { activity: 'run', status: 'running', elapsed_s: 1380, updated_at: new Date(now.getTime() - 120_000).toISOString(), distance_km: 4.12, pace_s_per_km: 335, target_km: null };
+    const delivered = await deliver(admin, user.id, composeLive(sample, now), 90);
+    return json(200, { delivered });
+  }
   if (body?.mode !== 'test') return json(400, { error: 'Pedido inválido' });
 
   const { data: p } = await admin.from('notification_prefs').select('*').eq('user_id', user.id).maybeSingle<Prefs>();

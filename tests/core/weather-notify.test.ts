@@ -98,7 +98,7 @@ test('avisos: texto de la mañana y de la noche', () => {
 
 test('la función de avisos usa la misma lógica que la app', async () => {
   const { readFileSync } = await import('node:fs');
-  for (const f of ['notify/compose.ts', 'weather/weather.ts']) {
+  for (const f of ['notify/compose.ts', 'notify/live.ts', 'weather/weather.ts']) {
     assert.equal(readFileSync(`supabase/functions/send-reminders/core/${f}`, 'utf8'), readFileSync(`src/core/${f}`, 'utf8'), `${f} desactualizado: correr node scripts/sync-function-core.mjs`);
   }
 });
@@ -115,4 +115,27 @@ test('clima guardado: se reubica en la hora pedida', async () => {
   assert.equal(forecastAt(f, '2026-11-08T07'), null);
   assert.equal(forecastAt(f, '2026-11-07T00'), null); // fuera de las horas descargadas
   assert.equal(trimForecast({ ...f, hours: Array(100).fill(f.hours[0]!) }).hours.length, 48);
+});
+
+test('notificación en vivo: tiempo real, distancia medida y estimada', async () => {
+  const { composeLive, liveElapsed, clock } = await import('../../src/core/notify/live.ts');
+  const base = { activity: 'run' as const, status: 'running' as const, elapsed_s: 600, updated_at: '2026-11-06T13:00:00Z', distance_km: 2, pace_s_per_km: 300, target_km: 8 };
+  // 30 s después: todavía "en vivo", sin estimar
+  let m = composeLive(base, new Date('2026-11-06T13:00:30Z'));
+  assert.equal(m.title, 'Running · 10:30 · 2,00 km de 8');
+  assert.equal(m.body, 'Ritmo medio 5:00/km');
+  assert.equal(m.tag, 'fit20-live');
+  // 10 min con el celu bloqueado: 600 s / 300 s/km = +2 km estimados
+  m = composeLive(base, new Date('2026-11-06T13:10:00Z'));
+  assert.equal(m.title, 'Running · 20:00 · ≈4,00 km de 8');
+  assert.match(m.body, /^2,00 km medidos al bloquear/);
+  // en pausa el tiempo no avanza
+  assert.equal(liveElapsed({ ...base, status: 'paused' }, new Date('2026-11-06T14:00:00Z')), 600);
+  assert.match(composeLive({ ...base, status: 'paused' }, new Date('2026-11-06T14:00:00Z')).title, /^Running en pausa · 10:00 · 2,00 km/);
+  // bici: velocidad; sin ritmo todavía: sin estimación
+  assert.match(composeLive({ ...base, activity: 'bike', pace_s_per_km: 150, target_km: null }, new Date('2026-11-06T13:00:10Z')).body, /Velocidad media 24 km\/h/);
+  assert.equal(composeLive({ ...base, pace_s_per_km: null, target_km: null }, new Date('2026-11-06T13:05:00Z')).title, 'Running · 15:00 · 2,00 km');
+  // más de 45 min sin datos: deja de estimar
+  assert.match(composeLive(base, new Date('2026-11-06T14:00:00Z')).body, /Desbloqueá/);
+  assert.equal(clock(3725), '1:02:05');
 });

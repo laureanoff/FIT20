@@ -16,7 +16,9 @@ import { WeatherCard } from '@/features/weather/WeatherCard';
 import { MusicCard } from '@/features/music/MusicCard';
 import { rememberLocation } from '@/features/weather/store';
 import { lockScreenActive, lockScreenSupported, setAudioSession, startLockScreen, stopLockScreen, updateLockScreen } from './lockscreen';
-import { clearProgress, kmNotifyEnabled, kmNotifySupported, setKmNotify, showProgress } from './liveNotify';
+import { clearProgress, kmNotifySupported, showProgress } from './liveNotify';
+import { type LiveInterval, type LiveSnapshot, endLive, liveInterval, sendLive, setLiveInterval, testLive } from './liveSync';
+import { currentSubscription, enablePush, markPushOn } from '@/features/notify/push';
 import { type CardioAudioMode, announceEvery, cardioAudioMode, primeVoice, setCardioAudioMode, setVoiceEnabled, speak, splitPhrase, voiceEnabled, voiceSupported } from './voice';
 import { ACTIVITIES, ACTIVITY_ICON, ACTIVITY_LABEL, ACTIVITY_NOUN, fmtSpeed, usesSpeed } from './activity';
 
@@ -58,10 +60,33 @@ export function LiveRunScreen() {
   const [audioMode, setAudioMode] = useState<CardioAudioMode>(cardioAudioMode);
   const lockOn = audioMode === 'lock' && lockScreenSupported();
   const [voiceOn, setVoiceOn] = useState(voiceEnabled);
-  const [kmNotifyOn, setKmNotifyOn] = useState(kmNotifyEnabled);
+  const [liveIv, setLiveIv] = useState<LiveInterval>(liveInterval);
+  const [liveMsg, setLiveMsg] = useState<string | null>(null);
+  const [liveBusy, setLiveBusy] = useState(false);
   const [lockFailed, setLockFailed] = useState(false);
   const [demoUntil, setDemoUntil] = useState(0);
   const [, bumpLock] = useState(0);
+  const liveRef = useRef<LiveSnapshot | null>(null);
+  /** Elegir cada cuánto llega la notificación en vivo (activa las notificaciones si hacía falta; es dentro de un toque). */
+  const chooseLive = async (v: LiveInterval) => {
+    setLiveMsg(null);
+    if (v > 0 && !(await currentSubscription())) {
+      try {
+        await enablePush();
+        markPushOn(true);
+      } catch (e) {
+        setLiveMsg((e as Error).message);
+        return;
+      }
+    }
+    setLiveIv(v);
+    setLiveInterval(v);
+    const snap = liveRef.current;
+    if (snap) {
+      if (v) void sendLive(snap, v, snap.status === 'running' ? 'next' : 'none');
+      else void endLive();
+    }
+  };
   const showOnLock = () =>
     void startLockScreen(lockHandlers).then((ok) => {
       setLockFailed(!ok);
@@ -152,6 +177,44 @@ export function LiveRunScreen() {
   const pace = currentPace(track.accepted, track.cumulative_m);
   const avg = paceSecPerKm(track.distance_m / 1000, elapsed / 1000);
 
+  // Notificación en vivo: el servidor necesita saber cómo va la salida.
+  liveRef.current =
+    run && run.stopwatch.status !== 'idle'
+      ? {
+          activity: run.activity ?? 'run',
+          status: run.stopwatch.status === 'running' ? 'running' : 'paused',
+          elapsed_s: elapsed / 1000,
+          distance_km: track.distance_m / 1000,
+          pace_s_per_km: avg,
+          target_km: run.target_distance_km,
+        }
+      : null;
+  const liveStatus = liveRef.current?.status ?? null;
+  // Al empezar, pausar o reanudar: programar (o frenar) la próxima notificación.
+  useEffect(() => {
+    if (!liveIv || !liveRef.current) return;
+    void sendLive(liveRef.current, liveIv, liveStatus === 'running' ? 'next' : 'none');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveStatus]);
+  // Cada 100 m o cada minuto: actualizar distancia y ritmo.
+  const liveTick = `${Math.floor(track.distance_m / 100)}|${Math.floor(elapsed / 60000)}`;
+  useEffect(() => {
+    if (liveIv && liveRef.current?.status === 'running') void sendLive(liveRef.current, liveIv);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveTick]);
+  // Justo al bloquear el celu (o cambiar de app): el último dato antes de que el iPhone congele la app.
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === 'hidden' && liveIv && liveRef.current) void sendLive(liveRef.current, liveIv);
+    };
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', onHide);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', onHide);
+    };
+  }, [liveIv]);
+
   // Panel de la pantalla de bloqueo: se actualiza con cada segundo / metro.
   const lockSecond = Math.floor(elapsed / 1000);
   useEffect(() => {
@@ -209,7 +272,7 @@ export function LiveRunScreen() {
         spoke = speak(splitPhrase(a, last.km, elapsedMs(run.stopwatch, Date.now()) / 1000, segment));
       }
       if (!spoke && settings.sound_enabled) beep();
-      if (kmNotifyOn) {
+      if (liveIv > 0) {
         const secs = elapsedMs(run.stopwatch, Date.now()) / 1000;
         const kmh = (3600 / Math.max(1, last.duration_s)).toLocaleString('es-AR', { maximumFractionDigits: 1 });
         void showProgress(
@@ -241,11 +304,13 @@ export function LiveRunScreen() {
           const id = await finishRun(ctx, run, { rpe, notes });
           stopLockScreen();
           void clearProgress();
+          void endLive();
           navigate(`/running/${id}`, { replace: true });
         }}
         onDiscard={async () => {
           stopLockScreen();
           void clearProgress();
+          void endLive();
           await discardRun(db);
           navigate('/running', { replace: true });
         }}
@@ -409,17 +474,42 @@ export function LiveRunScreen() {
             </>
           )}
           {kmNotifySupported() && (
-            <Toggle
-              label="Notificación en cada km"
-              description="Km, tiempo y ritmo en la pantalla bloqueada a cada km. En iPhone, con la app instalada."
-              checked={kmNotifyOn}
-              onChange={(v) =>
-                void setKmNotify(v).then((on) => {
-                  setKmNotifyOn(on);
-                  if (on) void showProgress('Así te llega en cada km', 'Running · km 1 · 5:40 — Último km a 5:40/km');
-                })
-              }
-            />
+            <div className="flex flex-col gap-2 border-t border-line pt-3">
+              <p className="px-1 text-[15px]">Notificación en vivo</p>
+              <Segmented
+                label="Notificación en vivo"
+                value={String(liveIv) as '0' | '1' | '2' | '5'}
+                onChange={(v) => void chooseLive(Number(v) as LiveInterval)}
+                options={[
+                  { value: '0', label: 'No' },
+                  { value: '1', label: '1 min' },
+                  { value: '2', label: '2 min' },
+                  { value: '5', label: '5 min' },
+                ]}
+              />
+              <p className="px-1 text-[13px] text-muted">
+                {liveIv
+                  ? `Cada ${liveIv} min te llega tiempo y km a la pantalla bloqueada, aunque escuches Spotify. Con el celu bloqueado la distancia se estima con tu ritmo (≈).`
+                  : 'Tiempo y km en la pantalla bloqueada durante la salida, sin cortar la música.'}
+              </p>
+              {liveIv > 0 && (
+                <button
+                  type="button"
+                  disabled={liveBusy}
+                  onClick={() => {
+                    setLiveBusy(true);
+                    testLive()
+                      .then((n) => setLiveMsg(n ? 'Enviada: bloqueá el celu y fijate en unos segundos.' : 'No hay dispositivos con notificaciones activas.'))
+                      .catch((e: Error) => setLiveMsg(e.message))
+                      .finally(() => setLiveBusy(false));
+                  }}
+                  className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-raised text-[14px] font-semibold disabled:opacity-50"
+                >
+                  {liveBusy ? 'Enviando…' : 'Mandarme una de prueba'}
+                </button>
+              )}
+              {liveMsg && <p className="rounded-xl bg-raised px-3 py-2 text-[13px]">{liveMsg}</p>}
+            </div>
           )}
           {voiceSupported() && (
             <Toggle

@@ -40,7 +40,7 @@ async function reg(): Promise<ServiceWorkerRegistration | null> {
 }
 
 export async function showProgress(title: string, body: string): Promise<boolean> {
-  if (!kmNotifyEnabled()) return false;
+  if (kmNotifyPermission() !== 'granted') return false;
   const r = await reg();
   if (!r) return false;
   try {

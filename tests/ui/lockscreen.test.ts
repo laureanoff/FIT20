@@ -90,3 +90,18 @@ describe('pantalla de bloqueo', () => {
     });
   });
 });
+
+describe('notificación en vivo (datos para el servidor)', () => {
+  it('arma la fila con límites y programa la próxima', async () => {
+    const { liveRow, liveInterval, setLiveInterval } = await import('@/features/running/liveSync');
+    localStorage.clear();
+    expect(liveInterval()).toBe(0);
+    setLiveInterval(1);
+    expect(liveInterval()).toBe(1);
+    const now = new Date('2026-11-06T13:00:00Z');
+    const row = liveRow({ activity: 'run', status: 'running', elapsed_s: 600.4, distance_km: 2.12345, pace_s_per_km: 283.24, target_km: 8 }, 'u1', 1, now, 'next');
+    expect(row).toMatchObject({ user_id: 'u1', elapsed_s: 600, distance_km: 2.123, pace_s_per_km: 283.2, interval_min: 1, next_push_at: '2026-11-06T13:00:40.000Z' });
+    expect(liveRow({ activity: 'run', status: 'paused', elapsed_s: 10, distance_km: 0, pace_s_per_km: 12, target_km: null }, 'u1', 2, now, 'none')).toMatchObject({ pace_s_per_km: null, next_push_at: null });
+    expect('next_push_at' in liveRow({ activity: 'bike', status: 'running', elapsed_s: 10, distance_km: 0, pace_s_per_km: null, target_km: null }, 'u1', 5, now)).toBe(false);
+  });
+});
