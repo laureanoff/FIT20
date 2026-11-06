@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { DayStatus, MealType, PlanInput, PlanStatus, PlannedDay, Profile, SessionType } from '@/types/domain';
+import type { CardioActivity, DayStatus, MealType, PlanInput, PlanStatus, PlannedDay, Profile, SessionType } from '@/types/domain';
 import type { ConflictEvent, SyncOperation } from '@/core/sync/types';
 import type { PlannedMeal } from '@/core/nutrition/mealplan';
 
@@ -114,6 +114,8 @@ export interface ExerciseFavorite extends Synced {
 
 export interface RunningSession extends Synced {
   user_id: string;
+  /** run = running, walk = caminata, bike = bici. Registros viejos sin valor = running. */
+  activity?: CardioActivity;
   training_day_id: string | null;
   session_date: string;
   started_at: string | null;

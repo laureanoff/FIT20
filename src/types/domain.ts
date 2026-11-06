@@ -138,6 +138,8 @@ export interface Exercise {
 
 export type SessionType = 'strength' | 'run' | 'strength_run' | 'active_recovery' | 'rest';
 export type RunType = 'run_walk' | 'easy' | 'tempo' | 'intervals' | 'long';
+/** Actividad de cardio: todas usan el mismo registro con GPS. */
+export type CardioActivity = 'run' | 'walk' | 'bike';
 export type DayStatus = 'pending' | 'started' | 'completed' | 'skipped';
 export type PlanStatus = 'active' | 'paused' | 'completed' | 'archived';
 
@@ -152,6 +154,8 @@ export interface PlannedExercise {
 
 export interface PlannedRun {
   type: RunType;
+  /** Sin valor = running (planes anteriores a caminata y bici). */
+  activity?: CardioActivity;
   distance_km: number;
   duration_min: number;
   intensity: string;
@@ -184,6 +188,8 @@ export interface PlanInput {
     include: boolean;
     experience: RunningExperience;
     max_distance_km: number;
+    /** Actividades de cardio que se combinan con la fuerza (por defecto, solo running). */
+    activities?: CardioActivity[];
   };
   injuries: BodyRegion[];
   duration_days: number;

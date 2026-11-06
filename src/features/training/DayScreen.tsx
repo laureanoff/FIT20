@@ -1,4 +1,5 @@
-import { ArrowLeftRight, CalendarClock, Check, Footprints, Info, Play, ShieldAlert, Undo2, X } from 'lucide-react';
+import { ArrowLeftRight, CalendarClock, Check, Info, Play, ShieldAlert, Undo2, X } from 'lucide-react';
+import { ACTIVITY_ICON, ACTIVITY_LABEL, ACTIVITY_VERB, activityOf } from '@/features/running/activity';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Button, Card, Chip, ErrorBox, SectionTitle, Spinner, cx } from '@/components/ui';
@@ -40,6 +41,8 @@ function DayView({ day, plan, days, onStart }: { day: L<TrainingDay>; plan: L<Tr
   const hasExercises = p.exercises.length > 0;
   const restTargets = days.filter((d) => d.session_type === 'rest' && d.date >= today && d.id !== day.id && Math.abs(d.day_number - day.day_number) <= 7);
   const future = day.date > today;
+  const cardioAct = activityOf(p.run);
+  const CardioIcon = ACTIVITY_ICON[cardioAct];
 
   return (
     <div className="flex flex-col gap-4 pt-2">
@@ -120,7 +123,7 @@ function DayView({ day, plan, days, onStart }: { day: L<TrainingDay>; plan: L<Tr
         <Card>
           <SectionTitle>
             <span className="inline-flex items-center gap-1.5">
-              <Footprints className="size-3.5" aria-hidden /> Carrera
+              <CardioIcon className="size-3.5" aria-hidden /> {ACTIVITY_LABEL[cardioAct]}
             </span>
           </SectionTitle>
           <p className="flex items-baseline gap-3">
@@ -187,7 +190,7 @@ function DayView({ day, plan, days, onStart }: { day: L<TrainingDay>; plan: L<Tr
           {day.status !== 'completed' && day.status !== 'skipped' && p.run && !future && (
             <div className="grid grid-cols-2 gap-2">
               <Link to={`/running/en-curso?dia=${day.id}`} className={cx('inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl text-[15px] font-semibold', hasExercises ? 'bg-raised' : 'bg-accent text-accent-ink')}>
-                <Footprints className="size-4" aria-hidden /> Correr con GPS
+                <CardioIcon className="size-4" aria-hidden /> {ACTIVITY_VERB[cardioAct]} con GPS
               </Link>
               <Link to={`/running/manual?dia=${day.id}`} className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-raised text-[15px] font-semibold">
                 Registrar a mano

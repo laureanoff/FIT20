@@ -2,8 +2,8 @@ import type { DayStatus, PlannedExercise, SessionType } from '@/types/domain';
 
 export const SESSION_LABELS: Record<SessionType, string> = {
   strength: 'Fuerza',
-  run: 'Running',
-  strength_run: 'Fuerza + trote',
+  run: 'Cardio',
+  strength_run: 'Fuerza + cardio',
   active_recovery: 'Recuperación',
   rest: 'Descanso',
 };

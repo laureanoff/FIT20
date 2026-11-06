@@ -217,3 +217,17 @@ test('totales semanales/mensuales, racha, progreso y consistencia', () => {
   assert.equal(valueAt([{ date: '2026-11-01', v: 1 }, { date: '2026-11-08', v: 2 }], '2026-11-05')!.v, 1);
   assert.equal(ageFromBirthDate('1995-11-06', '2026-11-05'), 30);
 });
+
+test('GPS por actividad: en bici acepta 40 km/h; corriendo eso es un salto', async () => {
+  const { accumulateTrack, ACTIVITY_LIMITS, validateManualRun, speedKmh } = await import('../../src/core/running/track.ts');
+  // 11,1 m por cada 0,0001° de latitud; un punto por segundo = ~40 km/h
+  const pts = Array.from({ length: 20 }, (_, i) => ({ lat: -32.95 + i * 0.0001, lng: -60.65, accuracy: 5, elapsed_ms: i * 1000, segment: 0 }));
+  assert.ok(accumulateTrack(pts, ACTIVITY_LIMITS.bike.maxSpeedMps).distance_m > 200);
+  assert.equal(accumulateTrack(pts, ACTIVITY_LIMITS.run.maxSpeedMps).distance_m, 0);
+  assert.equal(accumulateTrack(pts).distance_m, 0); // por defecto, running
+  assert.ok(validateManualRun({ distance_km: 30, duration: '1:00:00' }, 'bike').ok);
+  assert.equal(validateManualRun({ distance_km: 30, duration: '1:00:00' }, 'run').ok, false);
+  assert.ok(validateManualRun({ distance_km: 5, duration: '55:00' }, 'walk').ok);
+  assert.equal(validateManualRun({ distance_km: 15, duration: '1:00:00' }, 'walk').ok, false);
+  assert.equal(speedKmh(30, 3600), 30);
+});

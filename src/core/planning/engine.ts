@@ -1,5 +1,6 @@
 import type {
   BodyRegion,
+  CardioActivity,
   Exercise,
   ISODate,
   PlanInput,
@@ -60,6 +61,10 @@ export function validatePlanInput(input: PlanInput): string[] {
   if (input.running.include && (input.running.max_distance_km < 0 || input.running.max_distance_km > 100)) {
     errors.push('La distancia máxima de carrera no es válida.');
   }
+  const acts = input.running.activities;
+  if (acts && (acts.some((a) => !CARDIO_ACTIVITIES.includes(a)) || (input.running.include && acts.length === 0))) {
+    errors.push('Elegí al menos una actividad de cardio válida (correr, caminar o bici).');
+  }
   return errors;
 }
 
@@ -107,7 +112,23 @@ function classifyDays(input: PlanInput): DayKind[] {
 interface Assigned {
   type: SessionType;
   runType?: RunType;
+  activity?: CardioActivity;
 }
+
+export const CARDIO_ACTIVITIES: readonly CardioActivity[] = ['run', 'walk', 'bike'];
+
+export function cardioActivities(input: PlanInput): CardioActivity[] {
+  const a = input.running.activities?.filter((x) => CARDIO_ACTIVITIES.includes(x));
+  return a?.length ? [...new Set(a)] : ['run'];
+}
+
+/** Cardio para después de la fuerza: el de menor impacto entre los elegidos. */
+function finisherActivity(acts: CardioActivity[]): CardioActivity {
+  return acts.includes('bike') ? 'bike' : acts.includes('walk') ? 'walk' : 'run';
+}
+
+/** Con poco tiempo por sesión, la fuerza va sola (salvo la única sesión de la semana). */
+const MIN_COMBO_MINUTES = 40;
 
 function assignSessionTypes(input: PlanInput, kinds: DayKind[]): Assigned[] {
   const out: Assigned[] = kinds.map((k) =>
@@ -115,6 +136,9 @@ function assignSessionTypes(input: PlanInput, kinds: DayKind[]): Assigned[] {
   );
   const share = GOAL_RX[input.goal].run_share;
   const runWalk = isRunWalk(input);
+  const acts = cardioActivities(input);
+  const fin = finisherActivity(acts);
+  const finType: RunType = fin === 'run' && runWalk ? 'run_walk' : 'easy';
 
   for (let weekStart = 0; weekStart < kinds.length; weekStart += 7) {
     const weekIndex = weekStart / 7;
@@ -124,7 +148,9 @@ function assignSessionTypes(input: PlanInput, kinds: DayKind[]): Assigned[] {
     if (H === 0 || !input.running.include) continue;
 
     if (H === 1) {
-      out[hard[0]!] = { type: 'strength_run', runType: runWalk ? 'run_walk' : 'easy' };
+      if (input.session_minutes >= MIN_COMBO_MINUTES) out[hard[0]!] = { type: 'strength_run', runType: finType, activity: fin };
+      // Sesiones cortas: no entran las dos cosas; se alterna una semana fuerza y otra cardio.
+      else if (weekIndex % 2 === 1) out[hard[0]!] = { type: 'run', runType: finType, activity: acts[Math.floor(weekIndex / 2) % acts.length]! };
       continue;
     }
 
@@ -135,15 +161,25 @@ function assignSessionTypes(input: PlanInput, kinds: DayKind[]): Assigned[] {
     for (let i = 0; i < S; i++) strengthPos.add(Math.round(((i + 0.5) * H) / S - 0.5));
     const runIdx = hard.filter((_, pos) => !strengthPos.has(pos));
 
+    // Fuerza + cardio: cada día de fuerza termina con un bloque de cardio suave.
+    if (input.session_minutes >= MIN_COMBO_MINUTES) {
+      hard.forEach((dayIdx, pos) => {
+        if (strengthPos.has(pos)) out[dayIdx] = { type: 'strength_run', runType: finType, activity: fin };
+      });
+    }
+
     const deload = isDeloadWeek(weekIndex);
-    const qualityAllowed = !runWalk && !deload && (input.level !== 'beginner' || weekIndex >= 2) && runIdx.length >= 2;
+    const qualityAllowed = !deload && (input.level !== 'beginner' || weekIndex >= 2) && runIdx.length >= 2;
     runIdx.forEach((dayIdx, n) => {
+      // Las actividades rotan entre semanas para que todas aparezcan.
+      const activity = acts[(weekIndex + n) % acts.length]!;
+      const isLast = n === runIdx.length - 1 && runIdx.length >= 2;
       let runType: RunType;
-      if (runWalk) runType = 'run_walk';
-      else if (n === runIdx.length - 1 && runIdx.length >= 2) runType = 'long';
-      else if (n === 0 && qualityAllowed) runType = weekIndex % 2 === 0 ? 'intervals' : 'tempo';
+      if (activity === 'run' && runWalk) runType = 'run_walk';
+      else if (isLast) runType = 'long';
+      else if (n === 0 && qualityAllowed && !(activity === 'run' && runWalk)) runType = activity === 'walk' ? 'tempo' : weekIndex % 2 === 0 ? 'intervals' : 'tempo';
       else runType = 'easy';
-      out[dayIdx] = { type: 'run', runType };
+      out[dayIdx] = { type: 'run', runType, activity };
     });
   }
   return out;
@@ -175,9 +211,8 @@ function assignSplits(assigned: Assigned[]): Map<number, { split: Split; variant
     const adjNext = next !== undefined && next - idx === 1;
 
     let split: Split;
-    if (assigned[idx]!.type === 'strength_run') {
-      split = adjPrev && prev && splitsOverlap(prev.split, 'full') ? (prev.split === 'upper' ? 'lower' : 'upper') : 'full';
-    } else if (S >= 4) {
+    // Los días de fuerza + cardio se reparten igual que los de fuerza sola.
+    if (S >= 4) {
       const cycle = splitCycle(S);
       const pos = cyclePosPerWeek.get(week) ?? 0;
       split = cycle[pos % cycle.length]!;
@@ -388,6 +423,84 @@ export function progressiveDistance(base: number, weekIndex: number): number {
   return current;
 }
 
+/** Sesión de cardio de la actividad indicada (running, caminata o bici). */
+export function buildCardio(type: RunType, activity: CardioActivity, input: PlanInput, weekIndex: number, capMin: number): PlannedRun {
+  if (activity === 'walk') return buildWalk(type, input, weekIndex, capMin);
+  if (activity === 'bike') return buildBike(type, input, weekIndex, capMin);
+  return { ...buildRun(type, input, weekIndex, capMin), activity: 'run' };
+}
+
+/** Ritmo de caminata enérgica (seg/km) y velocidad cómoda en bici (km/h) según el nivel. */
+const WALK_PACE_SEC = { beginner: 660, intermediate: 600, advanced: 570 } as const;
+const BIKE_SPEED_KMH = { beginner: 16, intermediate: 20, advanced: 24 } as const;
+const WALK_BASE_MIN = { beginner: 25, intermediate: 30, advanced: 35 } as const;
+const BIKE_BASE_MIN = { beginner: 30, intermediate: 40, advanced: 50 } as const;
+
+/** Minutos de una sesión que progresa (máx. +10% semanal, descarga cada 4 semanas). */
+function progressiveMinutes(base: number, type: RunType, weekIndex: number, capMin: number): number {
+  const start = type === 'long' ? base * 1.5 : type === 'easy' ? base : base * 0.9;
+  const max = type === 'long' ? capMin * 1.5 : capMin - 8;
+  return Math.max(10, Math.round(Math.min(progressiveDistance(start, weekIndex), max)));
+}
+
+function buildWalk(type: RunType, input: PlanInput, weekIndex: number, capMin: number): PlannedRun {
+  const t: RunType = type === 'long' ? 'long' : type === 'easy' || type === 'run_walk' ? 'easy' : 'tempo';
+  const pace = WALK_PACE_SEC[input.level];
+  const minutes = progressiveMinutes(WALK_BASE_MIN[input.level], t, weekIndex, capMin);
+  const fast = Math.max(2, Math.min(5, 2 + Math.floor(progressionWeeks(weekIndex) / 2)));
+  const blocks = Math.max(3, Math.floor((minutes - 10) / (fast + 2)));
+  const instructions: Record<'easy' | 'tempo' | 'long', string[]> = {
+    easy: ['Caminata enérgica continua: paso largo, brazos activos, respiración agitada pero podés hablar.', 'Elegí un recorrido llano o con pendientes suaves.'],
+    tempo: ['5 minutos a paso normal para entrar en calor.', `${blocks} bloques de ${fast} min a paso muy rápido + 2 min a paso normal.`, 'Terminá con 5 minutos a paso tranquilo.'],
+    long: ['Caminata larga a ritmo cómodo y constante.', 'Llevá agua y calzado cómodo; si hay subidas, mejor.'],
+  };
+  return {
+    type: t,
+    activity: 'walk',
+    duration_min: minutes,
+    distance_km: Math.max(1, floor01((minutes * 60) / pace)),
+    intensity: t === 'tempo' ? 'Moderada con picos (RPE 6–7 en los bloques rápidos).' : 'Moderada (RPE 4–5): respiración agitada, pero podés conversar.',
+    instructions: instructions[t as 'easy' | 'tempo' | 'long'],
+  };
+}
+
+function buildBike(type: RunType, input: PlanInput, weekIndex: number, capMin: number): PlannedRun {
+  const t: RunType = type === 'run_walk' ? 'easy' : type;
+  const speed = BIKE_SPEED_KMH[input.level];
+  const minutes = progressiveMinutes(BIKE_BASE_MIN[input.level], t, weekIndex, capMin);
+  const reps = Math.min(8, 4 + Math.floor(progressionWeeks(weekIndex) / 2));
+  const instructions: Record<'easy' | 'tempo' | 'intervals' | 'long', string[]> = {
+    easy: ['Pedaleo suave y continuo, con cambios livianos (piernas ágiles, sin forzar).', 'Siempre con casco; de noche, luces delantera y trasera.'],
+    tempo: ['10 minutos suaves para entrar en calor.', `${Math.min(30, 12 + progressionWeeks(weekIndex) * 2)} minutos a ritmo "cómodamente exigente" sostenido.`, 'Terminá con pedaleo suave.', 'Siempre con casco.'],
+    intervals: ['10 minutos suaves para entrar en calor.', `${reps} × 2 minutos fuerte (RPE 8) con 2 minutos suaves entre cada uno.`, 'Terminá con pedaleo suave. Hacé los bloques fuertes donde no haya tránsito.', 'Siempre con casco.'],
+    long: ['Salida larga a ritmo cómodo y constante.', 'Llevá agua y algo para comer si dura más de 75 minutos.', 'Siempre con casco; revisá frenos y cubiertas antes de salir.'],
+  };
+  return {
+    type: t,
+    activity: 'bike',
+    duration_min: minutes,
+    distance_km: Math.max(1, floor01((minutes / 60) * speed * (t === 'easy' || t === 'long' ? 1 : 0.95))),
+    intensity:
+      t === 'intervals' ? 'Alta en los bloques (RPE 8), muy suave en las pausas.'
+        : t === 'tempo' ? 'Moderada-alta sostenida (RPE 7).'
+          : 'Suave (RPE 4–5): podés mantener una conversación.',
+    instructions: instructions[t as 'easy' | 'tempo' | 'intervals' | 'long'],
+  };
+}
+
+const CARDIO_TITLES: Record<CardioActivity, Partial<Record<RunType, string>>> = {
+  run: {},
+  walk: { easy: 'Caminata · Ritmo enérgico', tempo: 'Caminata · Cambios de ritmo', long: 'Caminata · Larga' },
+  bike: { easy: 'Bici · Suave', tempo: 'Bici · Ritmo sostenido', intervals: 'Bici · Intervalos', long: 'Bici · Salida larga' },
+};
+
+export function cardioTitle(run: PlannedRun): string {
+  const a = run.activity ?? 'run';
+  return CARDIO_TITLES[a][run.type] ?? RUN_TITLES[run.type];
+}
+
+const COMBO_SUFFIX: Record<CardioActivity, string> = { run: 'trote', walk: 'caminata', bike: 'bici' };
+
 export function buildRun(type: RunType, input: PlanInput, weekIndex: number, capMin: number): PlannedRun {
   const pace = EASY_PACE_SEC[input.running.experience];
   const deload = isDeloadWeek(weekIndex);
@@ -536,9 +649,9 @@ export function generatePlan(input: PlanInput, library: readonly Exercise[] = EX
         };
       }
       case 'run': {
-        const run = buildRun(a.runType!, input, weekIndex, input.session_minutes);
+        const run = buildCardio(a.runType!, a.activity ?? 'run', input, weekIndex, input.session_minutes);
         return {
-          ...base, session_type: 'run', title: RUN_TITLES[run.type], focus: ['cardio', 'calves'],
+          ...base, session_type: 'run', title: cardioTitle(run), focus: run.activity === 'bike' ? ['cardio', 'quads'] : ['cardio', 'calves'],
           estimated_minutes: run.duration_min + 8, intensity: run.intensity, exercises: [], run,
           instructions: [
             `Entrada en calor: ${names(RUN_WARMUP_IDS)}.`,
@@ -552,7 +665,10 @@ export function generatePlan(input: PlanInput, library: readonly Exercise[] = EX
       case 'strength_run': {
         const s = splits.get(i)!;
         const isCombo = a.type === 'strength_run';
-        const run = isCombo ? buildRun(a.runType ?? 'easy', input, weekIndex, Math.min(25, Math.round(input.session_minutes / 2) + 10)) : null;
+        const comboAct = a.activity ?? 'run';
+        // El bloque de cardio ocupa ~1/3 de la sesión (10–20 min); el resto es fuerza.
+        const comboCap = Math.min(28, Math.max(18, Math.round(input.session_minutes * 0.35) + 8));
+        const run = isCombo ? buildCardio(a.runType ?? 'easy', comboAct, input, weekIndex, comboCap) : null;
         const budget = isCombo ? Math.max(12, strengthBudget - (run?.duration_min ?? 0)) : strengthBudget;
         const { exercises, notes } = buildStrength(s.split, s.variant, input, weekIndex, budget, library);
         const strengthMin = Math.round(exercises.reduce((acc, e) => acc + exerciseMinutes(e), 0));
@@ -560,7 +676,7 @@ export function generatePlan(input: PlanInput, library: readonly Exercise[] = EX
         return {
           ...base,
           session_type: a.type,
-          title: isCombo ? `${SPLIT_TITLES[s.split]} + trote` : SPLIT_TITLES[s.split],
+          title: isCombo ? `${SPLIT_TITLES[s.split]} + ${COMBO_SUFFIX[comboAct]}` : SPLIT_TITLES[s.split],
           focus,
           estimated_minutes: strengthMin + WARMUP_MIN + COOLDOWN_MIN + (run?.duration_min ?? 0),
           intensity: `Moderada · RPE ${exercises[0]?.rpe ?? 7}: terminá cada serie con 2–3 repeticiones en reserva.`,
@@ -570,7 +686,7 @@ export function generatePlan(input: PlanInput, library: readonly Exercise[] = EX
             `Entrada en calor (${WARMUP_MIN} min): ${names(WARMUP_IDS)}.`,
             'Progresión: cuando completes todas las series en el tope del rango con buena técnica, sumá carga o 1–2 repeticiones la próxima vez.',
             'Si aparece dolor articular (distinto del esfuerzo muscular), detené el ejercicio.',
-            ...(isCombo ? ['Hacé primero la fuerza y después el trote suave.'] : []),
+            ...(isCombo && run ? [`Hacé primero la fuerza y después ${run.duration_min} min de ${comboAct === 'run' ? 'trote suave' : comboAct === 'walk' ? 'caminata enérgica' : 'bici suave'}.`] : []),
             `Vuelta a la calma: ${names(COOLDOWN_IDS)}.`,
             ...notes,
             ...deloadNote,
@@ -638,8 +754,10 @@ export function adjustForReadiness(
       changes.push(`Se quitó ${ex.name}: no hay una alternativa segura para la zona con dolor.`);
       return [];
     });
-    if (out.run && (pain.has('knee') || pain.has('ankle') || pain.has('hip') || pain.has('lower_back'))) {
-      changes.push('Se suspende la carrera de hoy por dolor en una zona de impacto.');
+    const act = out.run?.activity ?? 'run';
+    const loaded: BodyRegion[] = act === 'walk' ? ['knee', 'ankle'] : act === 'bike' ? ['knee', 'hip', 'lower_back'] : ['knee', 'ankle', 'hip', 'lower_back'];
+    if (out.run && loaded.some((r) => pain.has(r))) {
+      changes.push(act === 'run' ? 'Se suspende la carrera de hoy por dolor en una zona de impacto.' : `Se suspende ${act === 'walk' ? 'la caminata' : 'la bici'} de hoy por dolor en una zona que carga.`);
       out.run = null;
       if (out.session_type === 'run') {
         out = toRecovery(out, 'Carrera suspendida por dolor: recuperación muy suave sin impacto.');
@@ -666,7 +784,7 @@ export function adjustForReadiness(
         duration_min: Math.round(out.run.duration_min * 0.7),
         intensity: 'Suave (RPE 4): sin bloques intensos hoy.',
       };
-      changes.push('Carrera acortada 30% y sin intensidad.');
+      changes.push(`${(out.run.activity ?? 'run') === 'run' ? 'Carrera acortada' : 'Cardio acortado'} 30% y sin intensidad.`);
     }
   }
 

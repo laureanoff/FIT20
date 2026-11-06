@@ -230,7 +230,7 @@ function TodayChecklist() {
 
   const todos: Todo[] = [];
   if (day && day.session_type !== 'rest' && day.status !== 'skipped') {
-    todos.push({ key: 'train', label: day.planned.run && !day.planned.exercises.length ? 'Salir a correr' : 'Entrenar', done: day.status === 'completed', to: `/entrenar/dia/${day.id}` });
+    todos.push({ key: 'train', label: day.planned.run && !day.planned.exercises.length ? ({ run: 'Salir a correr', walk: 'Salir a caminar', bike: 'Salir en bici' } as const)[day.planned.run.activity ?? 'run'] : day.planned.run ? 'Entrenar (fuerza + cardio)' : 'Entrenar', done: day.status === 'completed', to: `/entrenar/dia/${day.id}` });
   }
   const meals = new Set(log.logs.map((l) => l.meal_type)).size;
   todos.push({ key: 'food', label: 'Registrar tus comidas', done: meals >= 3, to: '/nutricion' });

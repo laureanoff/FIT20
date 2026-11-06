@@ -18,6 +18,18 @@ export const GPS_MAX_ACCURACY_M = 30;
 export const GPS_MIN_STEP_M = 3;
 export const GPS_MAX_SPEED_MPS = 8; // ~2:05 min/km: por encima es un salto de GPS, no una carrera
 
+export type Activity = 'run' | 'walk' | 'bike';
+
+/**
+ * Límites por actividad: velocidad máxima creíble (para descartar saltos de GPS) y rango de
+ * ritmo aceptado en el registro manual (seg/km).
+ */
+export const ACTIVITY_LIMITS: Record<Activity, { maxSpeedMps: number; minPace: number; maxPace: number }> = {
+  run: { maxSpeedMps: GPS_MAX_SPEED_MPS, minPace: 150, maxPace: 30 * 60 },
+  walk: { maxSpeedMps: 4, minPace: 5 * 60, maxPace: 30 * 60 },
+  bike: { maxSpeedMps: 22, minPace: 50, maxPace: 15 * 60 }, // ~80 km/h en bajada … 4 km/h
+};
+
 const R = 6_371_000;
 const toRad = (d: number) => (d * Math.PI) / 180;
 
@@ -36,7 +48,7 @@ export interface TrackResult {
 }
 
 /** Acumula distancia descartando puntos imprecisos, micro-movimientos (deriva) y saltos imposibles. */
-export function accumulateTrack(points: readonly GpsPoint[]): TrackResult {
+export function accumulateTrack(points: readonly GpsPoint[], maxSpeedMps = GPS_MAX_SPEED_MPS): TrackResult {
   const accepted: GpsPoint[] = [];
   const cumulative: number[] = [];
   let total = 0;
@@ -51,7 +63,7 @@ export function accumulateTrack(points: readonly GpsPoint[]): TrackResult {
     const d = haversineM(last, p);
     const dt = (p.elapsed_ms - last.elapsed_ms) / 1000;
     if (d < Math.max(GPS_MIN_STEP_M, p.accuracy / 4)) continue; // deriva estando quieto
-    if (dt <= 0 || d / dt > GPS_MAX_SPEED_MPS) continue; // salto de GPS
+    if (dt <= 0 || d / dt > maxSpeedMps) continue; // salto de GPS
     total += d;
     accepted.push(p);
     cumulative.push(total);
@@ -117,15 +129,21 @@ export function parseDuration(s: string): number | null {
   return h! * 3600 + m! * 60 + sec!;
 }
 
-export function validateManualRun(input: ManualRunInput): { ok: true; duration_s: number; pace: number } | { ok: false; errors: string[] } {
+export function validateManualRun(input: ManualRunInput, activity: Activity = 'run'): { ok: true; duration_s: number; pace: number } | { ok: false; errors: string[] } {
   const errors: string[] = [];
   if (!(input.distance_km > 0) || input.distance_km > 300) errors.push('La distancia debe estar entre 0 y 300 km.');
   const d = parseDuration(input.duration);
   if (d === null || d <= 0) errors.push('El tiempo debe tener formato mm:ss o h:mm:ss.');
   if (errors.length) return { ok: false, errors };
   const pace = paceSecPerKm(input.distance_km, d!)!;
-  if (pace < 150) return { ok: false, errors: ['Ese ritmo es más rápido que el récord mundial: revisá distancia y tiempo.'] };
-  if (pace > 30 * 60) return { ok: false, errors: ['El ritmo resultante supera 30 min/km: revisá los datos.'] };
+  const lim = ACTIVITY_LIMITS[activity];
+  if (pace < lim.minPace) {
+    const msg = activity === 'run' ? 'Ese ritmo es más rápido que el récord mundial: revisá distancia y tiempo.'
+      : activity === 'walk' ? 'Ese ritmo es demasiado rápido para una caminata (más de 12 km/h): ¿fue una carrera?'
+        : 'Esa velocidad supera los 70 km/h: revisá distancia y tiempo.';
+    return { ok: false, errors: [msg] };
+  }
+  if (pace > lim.maxPace) return { ok: false, errors: [`El ritmo resultante supera ${Math.round(lim.maxPace / 60)} min/km: revisá los datos.`] };
   return { ok: true, duration_s: d!, pace };
 }
 

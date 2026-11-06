@@ -1,17 +1,18 @@
-import { BedDouble, BookOpen, CalendarPlus, Check, ChevronLeft, ChevronRight, Dumbbell, Footprints, History, Pause, Play, Sparkles, X } from 'lucide-react';
+import { BedDouble, BookOpen, CalendarPlus, Check, ChevronLeft, ChevronRight, Dumbbell, History, Pause, Play, Sparkles, X } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, SectionTitle, Spinner, cx } from '@/components/ui';
 import { localToday, weekday } from '@/core/utils/date';
 import { WEEKDAYS } from '@/app/labels';
 import type { L, TrainingDay } from '@/lib/db/database';
-import type { SessionType } from '@/types/domain';
+import type { CardioActivity, SessionType } from '@/types/domain';
+import { ACTIVITY_ICON } from '@/features/running/activity';
 import { setPlanStatus } from './actions';
 import { SESSION_LABELS, dateLabel } from './format';
 import { useActivePlan, useCtx, useOpenWorkout, usePlanDays } from './hooks';
 
-export function SessionIcon({ type, className }: { type: SessionType; className?: string }) {
-  const Icon = type === 'run' ? Footprints : type === 'rest' ? BedDouble : type === 'active_recovery' ? Sparkles : Dumbbell;
+export function SessionIcon({ type, className, activity }: { type: SessionType; className?: string; activity?: CardioActivity }) {
+  const Icon = type === 'run' ? ACTIVITY_ICON[activity ?? 'run'] : type === 'rest' ? BedDouble : type === 'active_recovery' ? Sparkles : Dumbbell;
   return <Icon className={className} aria-hidden />;
 }
 
@@ -184,7 +185,7 @@ function DayRow({ day, today }: { day: L<TrainingDay>; today: string }) {
         <span className="text-[11px] text-muted">{wd.short}</span>
         <span className="num text-[17px] font-bold">{Number(day.date.slice(8))}</span>
       </span>
-      <SessionIcon type={day.session_type} className={cx('size-4 shrink-0', rest ? 'text-faint' : 'text-muted')} />
+      <SessionIcon type={day.session_type} activity={day.planned.run?.activity} className={cx('size-4 shrink-0', rest ? 'text-faint' : 'text-muted')} />
       <span className={cx('min-w-0 flex-1 truncate text-[14px]', rest ? 'text-faint' : 'font-medium')}>{day.planned.title}</span>
       {day.status === 'completed' ? (
         <span className="grid size-6 place-items-center rounded-full bg-ok text-bg" aria-label="Hecho">

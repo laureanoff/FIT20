@@ -60,7 +60,7 @@ afterEach(async () => {
   await db.delete();
 });
 
-const input = (days = 14) => planInputFrom(profile, { duration_days: days, start_date: '2026-11-02', include_running: true, focus_muscles: [] });
+const input = (days = 14) => planInputFrom(profile, { duration_days: days, start_date: '2026-11-02', include_running: true, cardio: ['run'], focus_muscles: [] });
 
 describe('planes en la base local', () => {
   it('crea el plan con todos sus días y una operación de sync por registro', async () => {
@@ -94,7 +94,7 @@ describe('planes en la base local', () => {
   it('el chequeo previo con fatiga alta reduce series y queda registrado', async () => {
     const planId = await createPlan(ctx, input(14));
     const plan = (await db.training_plans.get(planId))!;
-    const day = (await db.training_days.where('plan_id').equals(planId).toArray()).find((d) => d.planned.exercises.length && d.session_type === 'strength')!;
+    const day = (await db.training_days.where('plan_id').equals(planId).toArray()).find((d) => d.planned.exercises.length && (d.session_type === 'strength' || d.session_type === 'strength_run'))!;
     const before = day.planned.exercises.reduce((a, e) => a + e.sets, 0);
     const r = await applyReadiness(ctx, day, plan, { fatigue: 4, pain_regions: [] });
     const after = (await db.training_days.get(day.id))!;
@@ -107,7 +107,7 @@ describe('planes en la base local', () => {
 describe('sesión de fuerza', () => {
   it('registra series, termina el día y recuerda la última marca', async () => {
     const planId = await createPlan(ctx, input(14));
-    const day = (await db.training_days.where('plan_id').equals(planId).toArray()).find((d) => d.session_type === 'strength')!;
+    const day = (await db.training_days.where('plan_id').equals(planId).toArray()).find((d) => (d.session_type === 'strength' || d.session_type === 'strength_run'))!;
     const wid = await startWorkout(ctx, day);
     expect(await startWorkout(ctx, (await db.training_days.get(day.id))!)).toBe(wid); // retomar, no duplicar
     const wes = (await db.workout_exercises.where('workout_id').equals(wid).toArray()).sort((a, b) => a.order_index - b.order_index);

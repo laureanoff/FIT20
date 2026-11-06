@@ -1,4 +1,5 @@
-import { type GpsPoint, accumulateTrack, computeSplits } from '@/core/running/track';
+import { ACTIVITY_LIMITS, type GpsPoint, accumulateTrack, computeSplits } from '@/core/running/track';
+import type { CardioActivity } from '@/types/domain';
 import { type Stopwatch, createStopwatch, elapsedMs, pauseStopwatch, startStopwatch, stopStopwatch } from '@/core/timer/timer';
 import { type Fit20DB, type L, type LivePoint, type RunningSession, type TrackPoint, alive, getMeta, setMeta } from '@/lib/db/database';
 import { type PendingWrite, saveRecords } from '@/lib/db/repository';
@@ -11,6 +12,7 @@ const ACTIVE_KEY = 'active_run';
 
 export interface ActiveRun {
   id: string;
+  activity: CardioActivity;
   started_at: string;
   stopwatch: Stopwatch;
   segment: number;
@@ -24,9 +26,19 @@ async function write(ctx: Ctx, writes: PendingWrite[]): Promise<void> {
   if ((await saveRecords(ctx.db, writes)) > 0) ctx.changed();
 }
 
-export function getActiveRun(db: Fit20DB): Promise<ActiveRun | undefined> {
-  return getMeta<ActiveRun>(db, ACTIVE_KEY);
+export async function getActiveRun(db: Fit20DB): Promise<ActiveRun | undefined> {
+  const r = await getMeta<ActiveRun>(db, ACTIVE_KEY);
+  return r ? { ...r, activity: r.activity ?? 'run' } : undefined;
 }
+
+/** Cambiar la actividad antes de largar (mismo GPS, otros límites de velocidad). */
+export async function setRunActivity(db: Fit20DB, run: ActiveRun, activity: CardioActivity): Promise<ActiveRun> {
+  const next = { ...run, activity };
+  await setActive(db, next);
+  return next;
+}
+
+export const maxSpeedFor = (a: CardioActivity | undefined) => ACTIVITY_LIMITS[a ?? 'run'].maxSpeedMps;
 
 async function setActive(db: Fit20DB, run: ActiveRun | null): Promise<void> {
   if (run) await setMeta(db, ACTIVE_KEY, run);
@@ -34,6 +46,7 @@ async function setActive(db: Fit20DB, run: ActiveRun | null): Promise<void> {
 }
 
 export interface RunTarget {
+  activity: CardioActivity;
   training_day_id: string | null;
   run_type: string | null;
   target_distance_km: number | null;
@@ -99,7 +112,7 @@ export function fromTrack(t: TrackPoint): GpsPoint {
 
 export class RunTooShortError extends Error {
   constructor() {
-    super('Todavía no se registró distancia. Esperá a tener señal GPS y moverte un poco, o registrá la carrera a mano.');
+    super('Todavía no se registró distancia. Esperá a tener señal GPS y moverte un poco, o registrala a mano.');
   }
 }
 
@@ -107,7 +120,7 @@ export class RunTooShortError extends Error {
 export async function finishRun(ctx: Ctx, run: ActiveRun, extra: { rpe: number | null; notes: string }, now = Date.now()): Promise<string> {
   const sw = stopStopwatch(run.stopwatch, now);
   const raw = (await ctx.db.live_points.orderBy('seq').toArray()).map(toGps);
-  const track = accumulateTrack(raw);
+  const track = accumulateTrack(raw, maxSpeedFor(run.activity));
   const distance_km = Math.round(track.distance_m) / 1000;
   const duration_seconds = Math.max(1, Math.round(elapsedMs(sw, now) / 1000));
   if (distance_km < 0.01) throw new RunTooShortError();
@@ -115,6 +128,7 @@ export async function finishRun(ctx: Ctx, run: ActiveRun, extra: { rpe: number |
   const session: Omit<RunningSession, 'version' | 'updated_at'> = {
     id: run.id,
     user_id: ctx.userId,
+    activity: run.activity ?? 'run',
     training_day_id: run.training_day_id,
     session_date: localDateOf(run.started_at),
     started_at: run.started_at,
@@ -137,7 +151,8 @@ export async function finishRun(ctx: Ctx, run: ActiveRun, extra: { rpe: number |
   if (points.length) writes.push({ entity: 'running_tracks', record: { id: newId(), user_id: ctx.userId, session_id: run.id, points, deleted_at: null } });
   if (run.training_day_id) {
     const day = await ctx.db.training_days.get(run.training_day_id);
-    if (alive(day)) writes.push({ entity: 'training_days', record: { ...day, status: 'completed' } });
+    // En días de fuerza + cardio, el día se completa al terminar la fuerza (no solo con el cardio).
+    if (alive(day) && !day.planned.exercises.length) writes.push({ entity: 'training_days', record: { ...day, status: 'completed' } });
   }
   await write(ctx, writes);
   await discardRun(ctx.db);
@@ -169,6 +184,7 @@ export async function saveManualRun(ctx: Ctx, r: ManualRun): Promise<string> {
       record: {
         id,
         user_id: ctx.userId,
+        activity: r.target.activity,
         training_day_id: r.target.training_day_id,
         session_date: r.session_date,
         started_at: null,
@@ -186,7 +202,8 @@ export async function saveManualRun(ctx: Ctx, r: ManualRun): Promise<string> {
   ];
   if (r.target.training_day_id) {
     const day = await ctx.db.training_days.get(r.target.training_day_id);
-    if (alive(day)) writes.push({ entity: 'training_days', record: { ...day, status: 'completed' } });
+    // En días de fuerza + cardio, el día se completa al terminar la fuerza (no solo con el cardio).
+    if (alive(day) && !day.planned.exercises.length) writes.push({ entity: 'training_days', record: { ...day, status: 'completed' } });
   }
   await write(ctx, writes);
   return id;

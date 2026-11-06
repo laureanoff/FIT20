@@ -1,11 +1,12 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { ChevronRight, Footprints, MapPin, PenLine, Play, Trash2, Trophy } from 'lucide-react';
+import { ChevronRight, PenLine, Play, Trash2, Trophy } from 'lucide-react';
 import { Suspense, lazy, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Button, Card, ErrorBox, Field, SectionTitle, Spinner, cx } from '@/components/ui';
 import { useData } from '@/app/data';
-import { type RunSummary, formatPace, paceSecPerKm, personalBests, validateManualRun } from '@/core/running/track';
+import { type RunSummary, formatPace, paceSecPerKm, personalBests, speedKmh, validateManualRun } from '@/core/running/track';
+import type { CardioActivity } from '@/types/domain';
 import { formatClock } from '@/core/timer/timer';
 import { addDays, localToday, startOfWeek } from '@/core/utils/date';
 import { type L, type RunningSession, alive } from '@/lib/db/database';
@@ -13,6 +14,7 @@ import { useCtx, useTodayDay } from '@/features/training/hooks';
 import { dateLabel } from '@/features/training/format';
 import { BackLink } from '@/features/training/LibraryScreens';
 import { deleteRun, fromTrack, getActiveRun, saveManualRun, updateRunNotes } from './actions';
+import { ACTIVITIES, ACTIVITY_ICON, ACTIVITY_LABEL, ACTIVITY_NOUN, ACTIVITY_VERB, activityOf, fmtSpeed, usesSpeed } from './activity';
 
 const RouteMap = lazy(() => import('./RouteMap'));
 
@@ -41,72 +43,98 @@ export function weeklyKm(runs: readonly Pick<RunningSession, 'session_date' | 'd
   });
 }
 
+type Filter = 'all' | CardioActivity;
+
 export function RunningHome() {
   const data = useRuns();
   const today = useTodayDay();
   const { db } = useData();
   const active = useLiveQuery(async () => (await getActiveRun(db)) ?? null, [db]);
   const todayIso = localToday();
+  const [filter, setFilter] = useState<Filter>('all');
 
   const stats = useMemo(() => {
     if (!data) return null;
-    const summaries: RunSummary[] = data.runs.map((r) => ({ session_date: r.session_date, distance_km: r.distance_km, duration_seconds: r.duration_seconds, splits: data.bySession.get(r.id) }));
-    const weeks = weeklyKm(data.runs, todayIso);
-    return { pb: personalBests(summaries), weeks, thisWeek: weeks[weeks.length - 1]!.km };
-  }, [data, todayIso]);
+    const runs = filter === 'all' ? data.runs : data.runs.filter((r) => activityOf(r) === filter);
+    const summaries: RunSummary[] = runs.map((r) => ({ session_date: r.session_date, distance_km: r.distance_km, duration_seconds: r.duration_seconds, splits: data.bySession.get(r.id) }));
+    const weeks = weeklyKm(runs, todayIso);
+    const byActivity = ACTIVITIES.map((a) => {
+      const rs = data.runs.filter((r) => activityOf(r) === a);
+      return { a, n: rs.length, km: rs.reduce((acc, r) => acc + r.distance_km, 0) };
+    }).filter((x) => x.n > 0);
+    // En bici: mejor velocidad media en salidas de 10 km o más.
+    const bestBike = runs.filter((r) => r.distance_km >= 10).reduce<number | null>((acc, r) => Math.max(acc ?? 0, speedKmh(r.distance_km, r.duration_seconds)), null);
+    return { runs, pb: personalBests(summaries), weeks, thisWeek: weeks[weeks.length - 1]!.km, byActivity, bestBike };
+  }, [data, todayIso, filter]);
 
   if (!data || !stats || active === undefined || today === undefined) return <Spinner />;
   const plannedRun = today?.planned.run && today.status !== 'completed' && today.status !== 'skipped' ? today : null;
+  const plannedAct = plannedRun ? activityOf(plannedRun.planned.run) : 'run';
   const maxWeek = Math.max(1, ...stats.weeks.map((w) => w.km));
   const runningNow = active && active.stopwatch.status !== 'idle';
 
   return (
     <div className="flex flex-col gap-4 pt-3">
-      <h1 className="text-[28px] font-bold tracking-tight">Running</h1>
+      <h1 className="text-[28px] font-bold tracking-tight">Cardio</h1>
 
       {runningNow ? (
         <Link to="/running/en-curso" className="flex items-center gap-3 rounded-3xl bg-accent p-5 text-accent-ink">
           <Play className="size-6 shrink-0 fill-current" aria-hidden />
           <span className="flex-1">
-            <span className="block text-[13px] font-semibold uppercase opacity-70">{active.stopwatch.status === 'paused' ? 'En pausa' : 'Corriendo'}</span>
-            <span className="block text-[17px] font-bold">Volver a la carrera</span>
+            <span className="block text-[13px] font-semibold uppercase opacity-70">
+              {ACTIVITY_LABEL[activityOf(active)]} · {active.stopwatch.status === 'paused' ? 'en pausa' : 'en curso'}
+            </span>
+            <span className="block text-[17px] font-bold">Volver a la actividad</span>
           </span>
           <ChevronRight className="size-5" aria-hidden />
         </Link>
-      ) : plannedRun ? (
-        <section className="rounded-3xl bg-accent p-5 text-accent-ink">
-          <p className="text-[13px] font-semibold uppercase opacity-70">Hoy en tu plan</p>
-          <p className="mt-1 text-[22px] leading-tight font-bold">{plannedRun.planned.title}</p>
-          <p className="mt-1 text-[14px] opacity-75">
-            {fmtKm(plannedRun.planned.run!.distance_km, 1)} km · ~{plannedRun.planned.run!.duration_min} min · {plannedRun.planned.run!.intensity}
-          </p>
-          <div className="mt-4 flex gap-2">
-            <Link to={`/running/en-curso?dia=${plannedRun.id}`} className="inline-flex min-h-11 items-center gap-2 rounded-2xl bg-accent-ink px-4 text-[14px] font-semibold text-accent">
-              <Play className="size-4 fill-current" aria-hidden /> Empezar con GPS
-            </Link>
-            <Link to={`/running/manual?dia=${plannedRun.id}`} className="inline-flex min-h-11 items-center rounded-2xl bg-accent-ink/10 px-4 text-[14px] font-semibold">
-              A mano
-            </Link>
-          </div>
-        </section>
       ) : (
-        <div className="grid grid-cols-2 gap-3">
-          <Link to="/running/en-curso" className="flex flex-col gap-3 rounded-3xl bg-accent p-4 text-accent-ink">
-            <MapPin className="size-6" aria-hidden />
-            <span>
-              <span className="block text-[16px] font-bold">Correr con GPS</span>
-              <span className="block text-[13px] opacity-70">Distancia, ritmo y mapa</span>
-            </span>
-          </Link>
-          <Link to="/running/manual" className="flex flex-col gap-3 rounded-3xl border border-line bg-surface p-4">
-            <PenLine className="size-6 text-muted" aria-hidden />
-            <span>
-              <span className="block text-[16px] font-bold">Registrar a mano</span>
-              <span className="block text-[13px] text-muted">Cinta o reloj</span>
-            </span>
-          </Link>
-        </div>
+        plannedRun && (
+          <section className="rounded-3xl bg-accent p-5 text-accent-ink">
+            <p className="text-[13px] font-semibold uppercase opacity-70">Hoy en tu plan</p>
+            <p className="mt-1 text-[22px] leading-tight font-bold">{plannedRun.planned.title}</p>
+            <p className="mt-1 text-[14px] opacity-75">
+              {fmtKm(plannedRun.planned.run!.distance_km, 1)} km · ~{plannedRun.planned.run!.duration_min} min · {plannedRun.planned.run!.intensity}
+            </p>
+            <div className="mt-4 flex gap-2">
+              <Link to={`/running/en-curso?dia=${plannedRun.id}`} className="inline-flex min-h-11 items-center gap-2 rounded-2xl bg-accent-ink px-4 text-[14px] font-semibold text-accent">
+                <Play className="size-4 fill-current" aria-hidden /> {ACTIVITY_VERB[plannedAct]} con GPS
+              </Link>
+              <Link to={`/running/manual?dia=${plannedRun.id}`} className="inline-flex min-h-11 items-center rounded-2xl bg-accent-ink/10 px-4 text-[14px] font-semibold">
+                A mano
+              </Link>
+            </div>
+          </section>
+        )
       )}
+
+      {!runningNow && (
+        <>
+          <div className="grid grid-cols-3 gap-2">
+            {ACTIVITIES.map((a) => {
+              const Icon = ACTIVITY_ICON[a];
+              return (
+                <Link key={a} to={`/running/en-curso?actividad=${a}`} className={cx('flex flex-col gap-2 rounded-3xl p-4', plannedRun ? 'border border-line bg-surface' : 'bg-accent text-accent-ink')}>
+                  <Icon className="size-6" aria-hidden />
+                  <span className="text-[15px] leading-tight font-bold">{ACTIVITY_VERB[a]}</span>
+                  <span className={cx('text-[12px]', plannedRun ? 'text-muted' : 'opacity-70')}>con GPS</span>
+                </Link>
+              );
+            })}
+          </div>
+          <Link to="/running/manual" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-raised text-[15px] font-semibold">
+            <PenLine className="size-4" aria-hidden /> Registrar a mano (cinta, bici fija, reloj)
+          </Link>
+        </>
+      )}
+
+      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 [scrollbar-width:none]" role="radiogroup" aria-label="Filtrar por actividad">
+        {(['all', ...ACTIVITIES] as Filter[]).map((f) => (
+          <button key={f} type="button" role="radio" aria-checked={filter === f} onClick={() => setFilter(f)} className={cx('min-h-9 shrink-0 rounded-full px-3.5 text-[13px] font-medium', filter === f ? 'bg-ink text-bg' : 'bg-raised text-muted')}>
+            {f === 'all' ? 'Todo' : ACTIVITY_LABEL[f]}
+          </button>
+        ))}
+      </div>
 
       <Card>
         <SectionTitle>Esta semana</SectionTitle>
@@ -122,50 +150,67 @@ export function RunningHome() {
             </div>
           ))}
         </div>
+        {filter === 'all' && stats.byActivity.length > 1 && (
+          <p className="mt-3 text-[13px] text-muted">
+            En total: {stats.byActivity.map((x) => `${ACTIVITY_LABEL[x.a].toLowerCase()} ${fmtKm(x.km, 1)} km`).join(' · ')}
+          </p>
+        )}
       </Card>
 
-      {data.runs.length > 0 && (
+      {stats.runs.length > 0 && filter !== 'all' && (
         <Card>
           <SectionTitle>
             <span className="inline-flex items-center gap-1.5">
-              <Trophy className="size-3.5" aria-hidden /> Marcas personales
+              <Trophy className="size-3.5" aria-hidden /> Marcas · {ACTIVITY_LABEL[filter]}
             </span>
           </SectionTitle>
           <dl className="grid grid-cols-2 gap-2">
             <Pb label="Más larga" value={stats.pb.longest_km !== null ? `${fmtKm(stats.pb.longest_km)} km` : '—'} />
-            <Pb label="Mejor ritmo (3 km+)" value={stats.pb.fastest_pace_3k_plus !== null ? `${formatPace(stats.pb.fastest_pace_3k_plus)}/km` : '—'} />
-            <Pb label="Mejor km" value={stats.pb.best_1k_s !== null ? formatClock(stats.pb.best_1k_s * 1000) : '—'} />
-            <Pb label="Mejor 5 km" value={stats.pb.best_5k_s !== null ? formatClock(stats.pb.best_5k_s * 1000) : '—'} />
+            {filter === 'bike' ? (
+              <Pb label="Mejor velocidad (10 km+)" value={stats.bestBike ? `${fmtSpeed(stats.bestBike)} km/h` : '—'} />
+            ) : (
+              <Pb label="Mejor ritmo (3 km+)" value={stats.pb.fastest_pace_3k_plus !== null ? `${formatPace(stats.pb.fastest_pace_3k_plus)}/km` : '—'} />
+            )}
+            {filter === 'run' && <Pb label="Mejor km" value={stats.pb.best_1k_s !== null ? formatClock(stats.pb.best_1k_s * 1000) : '—'} />}
+            {filter === 'run' && <Pb label="Mejor 5 km" value={stats.pb.best_5k_s !== null ? formatClock(stats.pb.best_5k_s * 1000) : '—'} />}
           </dl>
           <p className="mt-3 text-[13px] text-muted">
-            Total: {fmtKm(stats.pb.total_km, 1)} km en {data.runs.length} {data.runs.length === 1 ? 'carrera' : 'carreras'} · {formatClock(stats.pb.total_seconds * 1000)}
+            Total: {fmtKm(stats.pb.total_km, 1)} km en {stats.runs.length} {stats.runs.length === 1 ? 'salida' : 'salidas'} · {formatClock(stats.pb.total_seconds * 1000)}
           </p>
         </Card>
       )}
 
       <section>
-        <h2 className="mb-2 text-[13px] font-semibold tracking-wide text-muted uppercase">Carreras</h2>
-        {data.runs.length === 0 ? (
-          <p className="rounded-3xl border border-dashed border-line p-6 text-center text-[14px] text-muted">Tu primera carrera aparece acá, con sus parciales y el recorrido.</p>
+        <h2 className="mb-2 text-[13px] font-semibold tracking-wide text-muted uppercase">Historial</h2>
+        {stats.runs.length === 0 ? (
+          <p className="rounded-3xl border border-dashed border-line p-6 text-center text-[14px] text-muted">Tus salidas aparecen acá, con sus parciales y el recorrido.</p>
         ) : (
           <Card className="p-0">
             <ul className="divide-y divide-line">
-              {data.runs.map((r) => (
-                <li key={r.id}>
-                  <Link to={`/running/${r.id}`} className="flex min-h-16 items-center gap-3 px-4 py-3">
-                    <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-raised text-muted">{r.source === 'gps' ? <MapPin className="size-4" /> : <Footprints className="size-4" />}</span>
-                    <span className="min-w-0 flex-1">
-                      <span className="num block text-[15px] font-semibold">
-                        {fmtKm(r.distance_km)} km · {formatClock(r.duration_seconds * 1000)}
+              {stats.runs.map((r) => {
+                const a = activityOf(r);
+                const Icon = ACTIVITY_ICON[a];
+                return (
+                  <li key={r.id}>
+                    <Link to={`/running/${r.id}`} className="flex min-h-16 items-center gap-3 px-4 py-3">
+                      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-raised text-muted" title={ACTIVITY_LABEL[a]}>
+                        <Icon className="size-4" aria-label={ACTIVITY_LABEL[a]} />
                       </span>
-                      <span className="block text-[13px] text-muted">
-                        {dateLabel(r.session_date, { weekday: 'short', day: 'numeric', month: 'short' })} · {formatPace(paceSecPerKm(r.distance_km, r.duration_seconds))}/km
+                      <span className="min-w-0 flex-1">
+                        <span className="num block text-[15px] font-semibold">
+                          {fmtKm(r.distance_km)} km · {formatClock(r.duration_seconds * 1000)}
+                        </span>
+                        <span className="block text-[13px] text-muted">
+                          {dateLabel(r.session_date, { weekday: 'short', day: 'numeric', month: 'short' })} ·{' '}
+                          {usesSpeed(a) ? `${fmtSpeed(speedKmh(r.distance_km, r.duration_seconds))} km/h` : `${formatPace(paceSecPerKm(r.distance_km, r.duration_seconds))}/km`}
+                          {r.source === 'gps' ? ' · GPS' : ''}
+                        </span>
                       </span>
-                    </span>
-                    <ChevronRight className="size-4 text-faint" aria-hidden />
-                  </Link>
-                </li>
-              ))}
+                      <ChevronRight className="size-4 text-faint" aria-hidden />
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           </Card>
         )}
@@ -190,6 +235,8 @@ export function ManualRunScreen() {
   const [params] = useSearchParams();
   const dayId = params.get('dia');
   const day = useLiveQuery(async () => (dayId ? ((await db.training_days.get(dayId)) ?? null) : null), [db, dayId]);
+  const [chosen, setChosen] = useState<CardioActivity | null>(null);
+  const act: CardioActivity = chosen ?? activityOf(day?.planned.run) ?? 'run';
   const [date, setDate] = useState(localToday());
   const [distance, setDistance] = useState('');
   const [time, setTime] = useState('');
@@ -199,10 +246,10 @@ export function ManualRunScreen() {
   const [busy, setBusy] = useState(false);
 
   const dist = Number(distance.replace(',', '.'));
-  const check = distance && time ? validateManualRun({ distance_km: dist, duration: time }) : null;
+  const check = distance && time ? validateManualRun({ distance_km: dist, duration: time }, act) : null;
 
   async function save() {
-    const v = validateManualRun({ distance_km: dist, duration: time });
+    const v = validateManualRun({ distance_km: dist, duration: time }, act);
     if (!v.ok) return setErrors(v.errors);
     if (date > localToday()) return setErrors(['La fecha no puede ser futura.']);
     setBusy(true);
@@ -214,6 +261,7 @@ export function ManualRunScreen() {
       rpe,
       notes,
       target: {
+        activity: act,
         training_day_id: run ? day!.id : null,
         run_type: run?.type ?? null,
         target_distance_km: run?.distance_km ?? null,
@@ -226,16 +274,38 @@ export function ManualRunScreen() {
   return (
     <div className="flex flex-col gap-4 pt-2">
       <div>
-        <BackLink to="/running" label="Running" />
-        <h1 className="mt-1 text-[26px] font-bold tracking-tight">Registrar carrera</h1>
+        <BackLink to="/running" label="Cardio" />
+        <h1 className="mt-1 text-[26px] font-bold tracking-tight">Registrar a mano</h1>
         {day?.planned.run && <p className="text-[14px] text-muted">Para tu plan: {day.planned.title} ({fmtKm(day.planned.run.distance_km, 1)} km)</p>}
+      </div>
+      <div className="grid grid-cols-3 gap-1 rounded-2xl bg-raised p-1" role="radiogroup" aria-label="Actividad">
+        {ACTIVITIES.map((a) => {
+          const Icon = ACTIVITY_ICON[a];
+          return (
+            <button key={a} type="button" role="radio" aria-checked={act === a} onClick={() => setChosen(a)} className={cx('inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl text-[14px] font-medium', act === a ? 'bg-surface text-ink shadow-sm' : 'text-muted')}>
+              <Icon className="size-4" aria-hidden /> {ACTIVITY_LABEL[a]}
+            </button>
+          );
+        })}
       </div>
       <Field label="Fecha" type="date" value={date} max={localToday()} onChange={(e) => setDate(e.target.value)} />
       <div className="grid grid-cols-2 gap-3">
         <Field label="Distancia" inputMode="decimal" suffix="km" placeholder="5,2" value={distance} onChange={(e) => setDistance(e.target.value.replace(/[^\d,.]/g, ''))} />
         <Field label="Tiempo" inputMode="numeric" placeholder="28:30" hint="mm:ss o h:mm:ss" value={time} onChange={(e) => setTime(e.target.value.replace(/[^\d:]/g, ''))} />
       </div>
-      {check?.ok && <p className="num rounded-2xl bg-raised px-4 py-3 text-[15px]">Ritmo: <strong>{formatPace(check.pace)}/km</strong></p>}
+      {check?.ok && (
+        <p className="num rounded-2xl bg-raised px-4 py-3 text-[15px]">
+          {usesSpeed(act) ? (
+            <>
+              Velocidad media: <strong>{fmtSpeed(3600 / check.pace)} km/h</strong>
+            </>
+          ) : (
+            <>
+              Ritmo: <strong>{formatPace(check.pace)}/km</strong>
+            </>
+          )}
+        </p>
+      )}
       <fieldset>
         <legend className="mb-2 text-[13px] text-muted">Esfuerzo (opcional, 1–10)</legend>
         <div className="grid grid-cols-10 gap-1">
@@ -274,8 +344,10 @@ export function RunDetailScreen() {
   const [confirm, setConfirm] = useState(false);
 
   if (data === undefined) return <Spinner />;
-  if (!data) return <p className="pt-6 text-muted">Carrera no encontrada.</p>;
+  if (!data) return <p className="pt-6 text-muted">Actividad no encontrada.</p>;
   const { run, splits, track } = data;
+  const act = activityOf(run);
+  const ActIcon = ACTIVITY_ICON[act];
   const pace = paceSecPerKm(run.distance_km, run.duration_seconds);
   const fastest = splits.length ? Math.min(...splits.map((s) => s.duration_seconds)) : 0;
   const slowest = splits.length ? Math.max(...splits.map((s) => s.duration_seconds)) : 0;
@@ -284,9 +356,9 @@ export function RunDetailScreen() {
   return (
     <div className="flex flex-col gap-4 pt-2">
       <div>
-        <BackLink to="/running" label="Running" />
-        <p className="mt-1 text-[13px] font-semibold text-muted uppercase">
-          {dateLabel(run.session_date)}
+        <BackLink to="/running" label="Cardio" />
+        <p className="mt-1 inline-flex items-center gap-1.5 text-[13px] font-semibold text-muted uppercase">
+          <ActIcon className="size-3.5" aria-hidden /> {ACTIVITY_LABEL[act]} · {dateLabel(run.session_date)}
           {run.started_at ? ` · ${new Date(run.started_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}` : ''}
         </p>
         <h1 className="num text-[40px] leading-none font-bold">{fmtKm(run.distance_km)} km</h1>
@@ -295,8 +367,8 @@ export function RunDetailScreen() {
 
       <div className="grid grid-cols-3 gap-2">
         <Pb label="Tiempo" value={formatClock(run.duration_seconds * 1000)} />
-        <Pb label="Ritmo" value={`${formatPace(pace)}/km`} />
-        <Pb label="Velocidad" value={`${(run.distance_km / (run.duration_seconds / 3600)).toLocaleString('es-AR', { maximumFractionDigits: 1 })} km/h`} />
+        <Pb label={usesSpeed(act) ? 'Velocidad' : 'Ritmo'} value={usesSpeed(act) ? `${fmtSpeed(speedKmh(run.distance_km, run.duration_seconds))} km/h` : `${formatPace(pace)}/km`} />
+        <Pb label={usesSpeed(act) ? 'Ritmo' : 'Velocidad'} value={usesSpeed(act) ? `${formatPace(pace)}/km` : `${fmtSpeed(speedKmh(run.distance_km, run.duration_seconds))} km/h`} />
       </div>
 
       {run.target_distance_km && (
@@ -354,7 +426,7 @@ export function RunDetailScreen() {
         </div>
       ) : (
         <button type="button" onClick={() => setConfirm(true)} className="self-center py-2 text-[14px] text-danger">
-          Eliminar carrera
+          Eliminar {ACTIVITY_NOUN[act]}
         </button>
       )}
     </div>

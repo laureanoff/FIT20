@@ -8,7 +8,7 @@ import { UpdateBanner } from './pwa';
 const TABS = [
   { to: '/', label: 'Inicio', icon: House, end: true },
   { to: '/entrenar', label: 'Entrenar', icon: Dumbbell },
-  { to: '/running', label: 'Running', icon: Footprints },
+  { to: '/running', label: 'Cardio', icon: Footprints },
   { to: '/nutricion', label: 'Nutrición', icon: Utensils },
   { to: '/progreso', label: 'Progreso', icon: ChartLine },
 ];

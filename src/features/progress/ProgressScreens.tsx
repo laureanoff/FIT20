@@ -168,7 +168,7 @@ export function ProgressScreen() {
         <SectionTitle>Actividad de los últimos 30 días</SectionTitle>
         <div className="grid grid-cols-3 gap-2">
           <Stat icon={<Dumbbell className="size-4" />} value={String(activity.workouts)} label="Sesiones de fuerza" />
-          <Stat icon={<Footprints className="size-4" />} value={`${fmt(activity.km)} km`} label={`${activity.runs} carreras`} />
+          <Stat icon={<Footprints className="size-4" />} value={`${fmt(activity.km)} km`} label={`${activity.runs} ${activity.runs === 1 ? 'salida' : 'salidas'} de cardio`} />
           <Stat icon={<Ruler className="size-4" />} value={String(activity.days)} label="Días activos" />
         </div>
       </Card>

@@ -6,11 +6,13 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Button, ErrorBox, Spinner, cx } from '@/components/ui';
 import { useData } from '@/app/data';
 import { accumulateTrack, computeSplits, formatPace, paceSecPerKm } from '@/core/running/track';
+import type { CardioActivity } from '@/types/domain';
 import { elapsedMs, formatClock } from '@/core/timer/timer';
 import type { LivePoint } from '@/lib/db/database';
 import { useCtx } from '@/features/training/hooks';
 import { beep, primeAudio, useWakeLock } from '@/features/training/useRestTimer';
-import { type ActiveRun, RunTooShortError, addLivePoint, discardRun, finishRun, getActiveRun, pauseRun, prepareRun, startRun, toGps } from './actions';
+import { type ActiveRun, RunTooShortError, addLivePoint, discardRun, finishRun, getActiveRun, maxSpeedFor, pauseRun, prepareRun, setRunActivity, startRun, toGps } from './actions';
+import { ACTIVITIES, ACTIVITY_ICON, ACTIVITY_LABEL, ACTIVITY_NOUN, fmtSpeed, usesSpeed } from './activity';
 
 const RouteMap = lazy(() => import('./RouteMap'));
 
@@ -36,6 +38,7 @@ export function LiveRunScreen() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const dayId = params.get('dia');
+  const wantedAct = (ACTIVITIES as string[]).includes(params.get('actividad') ?? '') ? (params.get('actividad') as CardioActivity) : null;
   const day = useLiveQuery(async () => (dayId ? ((await db.training_days.get(dayId)) ?? null) : null), [db, dayId]);
 
   const [run, setRun] = useState<ActiveRun | null>(null);
@@ -54,14 +57,17 @@ export function LiveRunScreen() {
     void (async () => {
       let existing = await getActiveRun(db);
       const wantedDay = day?.planned.run ? day.id : null;
+      const activity: CardioActivity = day?.planned.run?.activity ?? wantedAct ?? existing?.activity ?? 'run';
       // Una carrera preparada pero sin empezar se reemplaza si ahora se eligió otro día.
       if (existing && existing.stopwatch.status === 'idle' && existing.training_day_id !== wantedDay) {
         await discardRun(db);
         existing = undefined;
       }
+      if (existing && existing.stopwatch.status === 'idle' && existing.activity !== activity) existing = await setRunActivity(db, existing, activity);
       const r =
         existing ??
         (await prepareRun(db, {
+          activity,
           training_day_id: day?.planned.run ? day.id : null,
           run_type: day?.planned.run?.type ?? null,
           target_distance_km: day?.planned.run?.distance_km ?? null,
@@ -76,7 +82,7 @@ export function LiveRunScreen() {
     return () => {
       cancel = true;
     };
-  }, [db, day]);
+  }, [db, day, wantedAct]);
 
   // GPS: activo mientras la pantalla está abierta (para ver la señal antes de largar).
   useEffect(() => {
@@ -105,7 +111,7 @@ export function LiveRunScreen() {
     return () => clearInterval(t);
   }, [running]);
 
-  const track = useMemo(() => accumulateTrack(points.map(toGps)), [points]);
+  const track = useMemo(() => accumulateTrack(points.map(toGps), maxSpeedFor(run?.activity)), [points, run?.activity]);
   const splits = useMemo(() => computeSplits(track), [track]);
   const elapsed = run ? elapsedMs(run.stopwatch, now) : 0;
   const pace = currentPace(track.accepted, track.cumulative_m);
@@ -121,7 +127,10 @@ export function LiveRunScreen() {
     lastSplits.current = splits.length;
   }, [splits.length, settings.sound_enabled, settings.vibration_enabled]);
 
-  if (!run || day === undefined) return <Spinner label="Preparando la carrera…" />;
+  if (!run || day === undefined) return <Spinner label="Preparando el GPS…" />;
+  const act = run.activity ?? 'run';
+  const speed = usesSpeed(act);
+  const toKmh = (secPerKm: number | null) => (secPerKm ? 3600 / secPerKm : null);
 
   const target = run.target_distance_km;
   const progress = target ? Math.min(1, track.distance_m / 1000 / target) : null;
@@ -130,6 +139,7 @@ export function LiveRunScreen() {
   if (finishing) {
     return (
       <FinishRun
+        noun={ACTIVITY_NOUN[act]}
         onBack={() => setFinishing(false)}
         onSave={async (rpe, notes) => {
           const id = await finishRun(ctx, run, { rpe, notes });
@@ -152,6 +162,27 @@ export function LiveRunScreen() {
         <GpsBadge gps={gps} />
       </div>
 
+      {idle && !run.training_day_id ? (
+        <div className="grid grid-cols-3 gap-1 rounded-2xl bg-raised p-1" role="radiogroup" aria-label="Actividad">
+          {ACTIVITIES.map((a) => {
+            const Icon = ACTIVITY_ICON[a];
+            return (
+              <button key={a} type="button" role="radio" aria-checked={act === a} onClick={() => void setRunActivity(db, run, a).then(setRun)} className={cx('inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl text-[14px] font-medium', act === a ? 'bg-surface text-ink shadow-sm' : 'text-muted')}>
+                <Icon className="size-4" aria-hidden /> {ACTIVITY_LABEL[a]}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="inline-flex items-center gap-2 text-[15px] font-semibold">
+          {(() => {
+            const Icon = ACTIVITY_ICON[act];
+            return <Icon className="size-4 text-accent" aria-hidden />;
+          })()}
+          {ACTIVITY_LABEL[act]}
+        </p>
+      )}
+
       {run.target_distance_km && (
         <p className="text-[14px] text-muted">
           Objetivo: <span className="font-semibold text-ink">{run.target_distance_km.toLocaleString('es-AR')} km</span>
@@ -172,13 +203,22 @@ export function LiveRunScreen() {
         )}
         <div className="mt-5 grid grid-cols-3 gap-2">
           <Metric label="Tiempo" value={formatClock(elapsed)} />
-          <Metric label="Ritmo actual" value={formatPace(pace)} unit="/km" />
-          <Metric label="Promedio" value={formatPace(avg)} unit="/km" />
+          {speed ? (
+            <>
+              <Metric label="Velocidad" value={fmtSpeed(toKmh(pace))} unit=" km/h" />
+              <Metric label="Promedio" value={fmtSpeed(toKmh(avg))} unit=" km/h" />
+            </>
+          ) : (
+            <>
+              <Metric label="Ritmo actual" value={formatPace(pace)} unit="/km" />
+              <Metric label="Promedio" value={formatPace(avg)} unit="/km" />
+            </>
+          )}
         </div>
       </section>
 
       {gps.kind === 'denied' && (
-        <ErrorBox>Sin permiso para usar tu ubicación. Activalo en los ajustes del navegador para este sitio, o registrá la carrera a mano.</ErrorBox>
+        <ErrorBox>Sin permiso para usar tu ubicación. Activalo en los ajustes del navegador para este sitio, o registrala a mano.</ErrorBox>
       )}
       {gps.kind === 'unavailable' && <p className="rounded-2xl bg-warn/12 px-4 py-3 text-[14px] text-warn">{gps.message}</p>}
       {idle && (
@@ -197,7 +237,7 @@ export function LiveRunScreen() {
               void startRun(db, run).then(setRun);
             }}
             className="grid size-24 place-items-center rounded-full bg-accent text-accent-ink shadow-lg active:scale-95"
-            aria-label="Empezar a correr"
+            aria-label={act === 'run' ? 'Empezar a correr' : act === 'walk' ? 'Empezar a caminar' : 'Empezar a pedalear'}
           >
             <Play className="size-10 fill-current" />
           </button>
@@ -210,7 +250,7 @@ export function LiveRunScreen() {
             <button type="button" onClick={() => void startRun(db, run).then(setRun)} className="grid size-20 place-items-center rounded-full bg-accent text-accent-ink active:scale-95" aria-label="Reanudar">
               <Play className="size-8 fill-current" />
             </button>
-            <button type="button" onClick={() => setFinishing(true)} className="grid size-20 place-items-center rounded-full bg-danger text-bg active:scale-95" aria-label="Terminar carrera">
+            <button type="button" onClick={() => setFinishing(true)} className="grid size-20 place-items-center rounded-full bg-danger text-bg active:scale-95" aria-label="Terminar">
               <Square className="size-7 fill-current" />
             </button>
           </>
@@ -273,7 +313,7 @@ function GpsBadge({ gps }: { gps: GpsState }) {
   );
 }
 
-function FinishRun({ onBack, onSave, onDiscard }: { onBack: () => void; onSave: (rpe: number | null, notes: string) => Promise<void>; onDiscard: () => Promise<void> }) {
+function FinishRun({ noun, onBack, onSave, onDiscard }: { noun: string; onBack: () => void; onSave: (rpe: number | null, notes: string) => Promise<void>; onDiscard: () => Promise<void> }) {
   const [rpe, setRpe] = useState<number | null>(null);
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
@@ -321,7 +361,7 @@ function FinishRun({ onBack, onSave, onDiscard }: { onBack: () => void; onSave: 
           }
         }}
       >
-        Guardar carrera
+        Guardar {noun}
       </Button>
       {confirmDiscard ? (
         <div className="grid grid-cols-2 gap-2">
@@ -334,7 +374,7 @@ function FinishRun({ onBack, onSave, onDiscard }: { onBack: () => void; onSave: 
         </div>
       ) : (
         <button type="button" onClick={() => setConfirmDiscard(true)} className="self-center py-2 text-[14px] text-danger">
-          Descartar esta carrera
+          Descartar
         </button>
       )}
     </div>

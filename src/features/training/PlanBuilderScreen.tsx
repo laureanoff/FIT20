@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Button, Card, Chip, ErrorBox, Field, SectionTitle, Toggle } from '@/components/ui';
+import { Button, Card, Chip, ErrorBox, Field, SectionTitle, Toggle, cx } from '@/components/ui';
+import { ACTIVITIES, ACTIVITY_ICON, ACTIVITY_LABEL } from '@/features/running/activity';
 import { useProfile } from '@/app/data';
 import { GOAL_LABELS, LEVEL_LABELS, WEEKDAYS } from '@/app/labels';
 import { MAX_PLAN_DAYS, PLAN_PRESETS, generatePlan, validatePlanInput } from '@/core/planning/engine';
 import { localToday } from '@/core/utils/date';
 import { MUSCLE_LABELS } from '@/data/exercises';
-import type { MuscleGroup, PlannedDay } from '@/types/domain';
+import type { CardioActivity, MuscleGroup, PlannedDay } from '@/types/domain';
 import { createPlan, planInputFrom } from './actions';
 import { SESSION_LABELS, dateLabel } from './format';
 import { useActivePlan, useCtx } from './hooks';
@@ -24,13 +25,15 @@ export function PlanBuilderScreen() {
   const [duration, setDuration] = useState<number>(30);
   const [custom, setCustom] = useState('');
   const [start, setStart] = useState(localToday());
-  const [running, setRunning] = useState(profile.running_experience !== 'none' || profile.primary_goal === 'endurance');
+  const [running, setRunning] = useState(true);
+  // Por defecto: quien no corre arranca caminando; el resto, corriendo.
+  const [cardio, setCardio] = useState<CardioActivity[]>(profile.running_experience === 'none' ? ['walk'] : ['run']);
   const [focus, setFocus] = useState<MuscleGroup[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const days = custom ? Number(custom) : duration;
-  const input = planInputFrom(profile, { duration_days: days, start_date: start, include_running: running, focus_muscles: focus });
+  const input = planInputFrom(profile, { duration_days: days, start_date: start, include_running: running, cardio, focus_muscles: focus });
   const problems = validatePlanInput(input);
   const preview = useMemo<PlannedDay[] | null>(() => {
     if (problems.length) return null;
@@ -41,7 +44,7 @@ export function PlanBuilderScreen() {
     }
     // input se reconstruye en cada render: dependemos de sus partes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [days, start, running, focus.join(), problems.length, profile]);
+  }, [days, start, running, cardio.join(), focus.join(), problems.length, profile]);
 
   const counts = preview?.reduce<Record<string, number>>((acc, d) => ((acc[d.session_type] = (acc[d.session_type] ?? 0) + 1), acc), {}) ?? {};
 
@@ -93,7 +96,36 @@ export function PlanBuilderScreen() {
       </Card>
 
       <Card>
-        <Toggle label="Incluir running" description={running ? 'Carreras progresivas, nunca más de ~10% por semana.' : 'Solo fuerza y recuperación.'} checked={running} onChange={setRunning} />
+        <Toggle
+          label="Combinar con cardio"
+          description={running ? 'Los días de fuerza terminan con un bloque de cardio y hay días solo de cardio. Progresa como máximo ~10% por semana.' : 'Solo fuerza y recuperación.'}
+          checked={running}
+          onChange={setRunning}
+        />
+        {running && (
+          <>
+            <h3 className="mt-4 mb-2 text-[13px] font-medium text-muted">¿Qué cardio querés hacer? (podés elegir varios)</h3>
+            <div className="grid grid-cols-3 gap-2">
+              {ACTIVITIES.map((a) => {
+                const Icon = ACTIVITY_ICON[a];
+                const on = cardio.includes(a);
+                return (
+                  <button
+                    key={a}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => setCardio((c) => (on ? (c.length > 1 ? c.filter((x) => x !== a) : c) : [...c, a]))}
+                    className={cx('flex min-h-16 flex-col items-center justify-center gap-1 rounded-2xl border text-[14px] font-medium', on ? 'border-accent bg-accent text-accent-ink' : 'border-line bg-surface')}
+                  >
+                    <Icon className="size-5" aria-hidden />
+                    {ACTIVITY_LABEL[a]}
+                  </button>
+                );
+              })}
+            </div>
+            {cardio.includes('run') && profile.running_experience === 'none' && <p className="mt-2 text-[13px] text-muted">Como todavía no corrés, el running arranca con trote y caminata.</p>}
+          </>
+        )}
         <h3 className="mt-4 mb-2 text-[13px] font-medium text-muted">Priorizar grupos musculares (opcional, hasta {MAX_FOCUS})</h3>
         <div className="flex flex-wrap gap-2">
           {FOCUS.map((m) => (

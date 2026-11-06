@@ -4,7 +4,7 @@ import { getExercise } from '@/data/exercises';
 import { type ExerciseSet, type Fit20DB, type L, type TrainingDay, type TrainingPlan, type Workout, type WorkoutExercise, alive } from '@/lib/db/database';
 import { type PendingWrite, saveRecords } from '@/lib/db/repository';
 import { newId } from '@/lib/id';
-import type { MuscleGroup, PlanInput, PlannedDay, Profile } from '@/types/domain';
+import type { CardioActivity, MuscleGroup, PlanInput, PlannedDay, Profile } from '@/types/domain';
 
 export interface Ctx {
   db: Fit20DB;
@@ -32,6 +32,7 @@ export interface PlanOptions {
   duration_days: number;
   start_date: string;
   include_running: boolean;
+  cardio: CardioActivity[];
   focus_muscles: MuscleGroup[];
 }
 
@@ -43,7 +44,7 @@ export function planInputFrom(profile: Profile, o: PlanOptions): PlanInput {
     session_minutes: profile.session_minutes,
     equipment: profile.equipment,
     focus_muscles: o.focus_muscles,
-    running: { include: o.include_running, experience: profile.running_experience, max_distance_km: profile.max_run_distance_km },
+    running: { include: o.include_running && o.cardio.length > 0, experience: profile.running_experience, max_distance_km: profile.max_run_distance_km, activities: o.cardio.length ? o.cardio : ['run'] },
     injuries: profile.injuries,
     duration_days: o.duration_days,
     start_date: o.start_date,

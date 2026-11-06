@@ -113,7 +113,7 @@ test('invariantes sobre 126 perfiles distintos', () => {
       // Sin running si no lo pidió.
       if (!input.running.include) assert.equal(d.run, null);
       // Fuerza: tiempo estimado razonable para la sesión.
-      if (d.session_type === 'strength') assert.ok(d.estimated_minutes <= input.session_minutes * 1.25 + 5, `${d.estimated_minutes} > ${input.session_minutes}`);
+      if (isStrength(d)) assert.ok(d.estimated_minutes <= input.session_minutes * 1.25 + 5, `${d.estimated_minutes} > ${input.session_minutes} (${d.session_type})`);
       // Recuperación muscular: dos días seguidos de fuerza no cargan los mismos grupos grandes.
       const prev = plan[i - 1];
       if (prev && isStrength(prev) && isStrength(d)) {
@@ -188,7 +188,7 @@ test('grupos musculares priorizados aparecen en el plan', () => {
 
 test('dolor: reemplaza ejercicios, suspende carrera y recomienda evaluación profesional', () => {
   const plan = generatePlan({ ...base, equipment: ['gym'] });
-  const strength = plan.find((d) => d.session_type === 'strength' && d.exercises.some((e) => getExercise(e.exercise_id)!.stress_regions.includes('knee')))!;
+  const strength = plan.find((d) => isStrength(d) && d.exercises.some((e) => getExercise(e.exercise_id)!.stress_regions.includes('knee')))!;
   const r = adjustForReadiness(strength, { fatigue: 2, pain_regions: ['knee'] }, base);
   assert.ok(r.recommend_professional);
   assert.ok(r.warnings.length > 0);
@@ -202,7 +202,7 @@ test('dolor: reemplaza ejercicios, suspende carrera y recomienda evaluación pro
 
 test('fatiga: 4 reduce volumen, 5 convierte en recuperación', () => {
   const plan = generatePlan(base);
-  const s = plan.find((d) => d.session_type === 'strength')!;
+  const s = plan.find((d) => isStrength(d))!;
   const r4 = adjustForReadiness(s, { fatigue: 4, pain_regions: [] }, base);
   const total = (d: PlannedDay) => d.exercises.reduce((a, e) => a + e.sets, 0);
   assert.ok(total(r4.day) < total(s));
@@ -227,7 +227,7 @@ test('detección de fatiga acumulada', () => {
 
 test('reprogramar: solo a días de descanso y sin duplicar sesiones', () => {
   const plan = generatePlan(base);
-  const session = plan.find((d) => d.session_type === 'strength')!;
+  const session = plan.find((d) => isStrength(d))!;
   const rest = plan.find((d) => d.session_type === 'rest' && d.date > session.date)!;
   const moved = rescheduleDay(plan, session.date, rest.date);
   assert.equal(moved.find((d) => d.date === session.date)!.session_type, 'rest');
@@ -244,8 +244,45 @@ test('cambiar ejercicio: alternativas del mismo patrón y compatibles', () => {
   assert.ok(alts.every((a) => a.pattern === 'squat' && isAvailable(a, [])));
   assert.ok(alternativesFor('goblet-squat', { equipment: [], injuries: ['knee'] }).every((a) => !a.stress_regions.includes('knee')));
   const plan = generatePlan(base);
-  const s = plan.find((d) => d.exercises.length > 0 && d.session_type === 'strength')!;
+  const s = plan.find((d) => d.exercises.length > 0 && isStrength(d))!;
   const swapped = swapExercise(s, 0, alts[0]!.id);
   assert.equal(swapped.exercises[0]!.exercise_id, alts[0]!.id);
   assert.notEqual(s.exercises[0]!.exercise_id, alts[0]!.id); // el original no se muta
+});
+
+test('cardio: caminata y bici se combinan con la fuerza y rotan entre semanas', () => {
+  const input = { ...base, duration_days: 28, session_minutes: 60, running: { ...base.running, include: true, activities: ['walk', 'bike'] as ('walk' | 'bike')[] } };
+  const plan = generatePlan(input);
+  const cardio = plan.filter((d) => d.run);
+  assert.ok(cardio.length > 0);
+  // Nunca running si no se eligió.
+  assert.ok(cardio.every((d) => d.run!.activity === 'walk' || d.run!.activity === 'bike'));
+  assert.ok(cardio.some((d) => d.run!.activity === 'walk') && cardio.some((d) => d.run!.activity === 'bike'));
+  // Todos los días de fuerza llevan su bloque de cardio (el de menor impacto: bici).
+  const strength = plan.filter(isStrength);
+  assert.ok(strength.length > 0 && strength.every((d) => d.session_type === 'strength_run' && d.run?.activity === 'bike'));
+  assert.ok(strength.every((d) => / \+ bici$/.test(d.title)));
+  assert.ok(plan.filter((d) => d.session_type === 'run').every((d) => /^(Caminata|Bici) · /.test(d.title)));
+  // La caminata nunca tiene intervalos de carrera.
+  assert.ok(cardio.filter((d) => d.run!.activity === 'walk').every((d) => d.run!.type !== 'intervals' && d.run!.type !== 'run_walk'));
+});
+
+test('cardio: el volumen semanal de bici y caminata progresa sin saltos de más de 10%', () => {
+  for (const act of ['walk', 'bike'] as const) {
+    const plan = generatePlan({ ...base, duration_days: 84, session_minutes: 90, running: { ...base.running, include: true, activities: [act] } });
+    const weekly: number[] = [];
+    for (let w = 0; w < 12; w++) weekly.push(plan.slice(w * 7, w * 7 + 7).reduce((a, d) => a + (d.run?.duration_min ?? 0), 0));
+    for (let w = 1; w < 12; w++) {
+      if (w % 4 === 3 || (w - 1) % 4 === 3) continue; // descargas y la semana que vuelve
+      assert.ok(weekly[w]! <= weekly[w - 1]! * 1.12 + 2, `${act} semana ${w}: ${weekly[w - 1]} → ${weekly[w]}`);
+    }
+  }
+});
+
+test('cardio: dolor de rodilla suspende la bici; tobillo no suspende la bici', async () => {
+  const input = { ...base, running: { ...base.running, include: true, activities: ['bike'] as 'bike'[] } };
+  const plan = generatePlan(input);
+  const ride = plan.find((d) => d.session_type === 'run')!;
+  assert.equal(adjustForReadiness(ride, { fatigue: 1, pain_regions: ['knee'] }, input).day.run, null);
+  assert.ok(adjustForReadiness(ride, { fatigue: 1, pain_regions: ['ankle'] }, input).day.run);
 });

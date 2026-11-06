@@ -18,7 +18,7 @@ afterEach(async () => {
   await db.delete();
 });
 
-const noTarget = { training_day_id: null, run_type: null, target_distance_km: null, target_duration_seconds: null };
+const noTarget = { activity: 'run' as const, training_day_id: null, run_type: null, target_distance_km: null, target_duration_seconds: null };
 // ~11,1 m por cada 0,0001° de latitud.
 const at = (i: number) => ({ lat: -32.95 + i * 0.0001, lng: -60.65, accuracy: 5 });
 
@@ -114,5 +114,30 @@ describe('carrera manual y estadísticas', () => {
 
   it('usa la fecha local del dispositivo', () => {
     expect(localDateOf(new Date(2026, 10, 5, 23, 30).toISOString())).toBe('2026-11-05');
+  });
+});
+
+describe('bici y caminata con el mismo GPS', () => {
+  it('en bici acepta velocidades que corriendo serían saltos y guarda la actividad', async () => {
+    let run = await prepareRun(db, { ...noTarget, activity: 'bike' });
+    expect(run.activity).toBe('bike');
+    run = await startRun(db, run, 0);
+    // ~11 m por segundo ≈ 40 km/h
+    for (let i = 0; i <= 120; i++) await addLivePoint(db, run, at(i), i * 1000);
+    const id = await finishRun(ctx, run, { rpe: null, notes: '' }, 121_000);
+    const s = (await db.running_sessions.get(id))!;
+    expect(s.activity).toBe('bike');
+    expect(s.distance_km).toBeGreaterThan(1.2);
+  });
+
+  it('cambiar de actividad antes de largar y carga manual de caminata', async () => {
+    const { setRunActivity } = await import('@/features/running/actions');
+    const run = await prepareRun(db, noTarget);
+    expect((await setRunActivity(db, run, 'walk')).activity).toBe('walk');
+    expect((await getActiveRun(db))!.activity).toBe('walk');
+    await discardRun(db);
+    const id = await saveManualRun(ctx, { session_date: '2026-11-06', distance_km: 4.5, duration_seconds: 2700, rpe: null, notes: '', target: { ...noTarget, activity: 'walk' } });
+    expect((await db.running_sessions.get(id))!.activity).toBe('walk');
+    expect((await db.outbox.toArray()).find((o) => o.entity_id === id)!.payload.activity).toBe('walk');
   });
 });
