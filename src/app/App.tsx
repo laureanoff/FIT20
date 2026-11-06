@@ -5,6 +5,7 @@ import { LoginScreen, NewPasswordScreen, RecoverScreen, SignupScreen } from '@/f
 import { DashboardScreen } from '@/features/dashboard/DashboardScreen';
 import { OnboardingScreen } from '@/features/onboarding/OnboardingScreen';
 import { ProfileEditScreen, ProfileScreen } from '@/features/profile/ProfileScreen';
+import { NotificationsScreen } from '@/features/notify/NotificationsScreen';
 import { MealPlanScreen } from '@/features/nutrition/MealPlanScreen';
 import { AddFoodScreen, CustomFoodScreen, EditFoodLogScreen, NutritionScreen, TargetsScreen } from '@/features/nutrition/NutritionScreens';
 import { CompareScreen, MeasureScreen, NewPhotoScreen, PhotoScreen, ProgressScreen } from '@/features/progress/ProgressScreens';
@@ -119,6 +120,7 @@ function UserGate() {
         <Route path="progreso/foto/:id" element={<PhotoScreen />} />
         <Route path="progreso/comparar" element={<CompareScreen />} />
         <Route path="perfil" element={<ProfileScreen />} />
+        <Route path="perfil/notificaciones" element={<NotificationsScreen />} />
         <Route path="perfil/:section" element={<ProfileEditScreen />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

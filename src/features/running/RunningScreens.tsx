@@ -1,4 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
+import { WeatherCard } from '@/features/weather/WeatherCard';
 import { ChevronRight, PenLine, Play, Trash2, Trophy } from 'lucide-react';
 import { Suspense, lazy, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -125,6 +126,7 @@ export function RunningHome() {
           <Link to="/running/manual" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-raised text-[15px] font-semibold">
             <PenLine className="size-4" aria-hidden /> Registrar a mano (cinta, bici fija, reloj)
           </Link>
+          <WeatherCard activity={plannedAct} compact />
         </>
       )}
 

@@ -20,9 +20,18 @@ PWA instalable en iPhone y Android · React + TypeScript + Vite · Supabase · I
 | Plan de alimentación según el objetivo (semana de comidas, cambiar, rearmar, "Lo comí") | ✅ |
 | Fase 6: sincronización en la app, indicador de estado, conflictos visibles con "usar la de este dispositivo" | ✅ |
 | Fase 7: PWA instalable (íconos, atajos, guía para iPhone/Android, actualización sin cortes), "Para hoy", exportar datos, prueba end-to-end | ✅ |
+| Cardio: running, caminata y bici con el mismo GPS; planes que combinan fuerza + cardio | ✅ |
+| Clima (Open-Meteo): pronóstico, mejor hora para salir y consejos según la actividad | ✅ |
+| Notificaciones push: aviso de la mañana (sesión + clima) y recordatorio de la noche | ✅ |
 | Supabase `fit20` (São Paulo) | ✅ Creado y configurado |
 | GitHub (`laureanoff/FIT20`) | ✅ |
 | Vercel (https://fit20.vercel.app) | ✅ |
+
+## Clima y notificaciones
+
+- **Clima**: en Inicio, Cardio y cada día del plan. Usa tu ubicación aproximada (~1 km), que queda en el teléfono; si salís con GPS la toma de ahí sin volver a pedir permiso.
+- **Notificaciones**: Perfil → Notificaciones → *Activar*. Elegís la hora del aviso de la mañana (qué entrenás hoy + clima) y, si querés, un recordatorio a la noche solo cuando la sesión sigue pendiente. En **iPhone** primero hay que instalar la app (Compartir → *Agregar a inicio*) y activarlas desde ahí (iOS 16.4 o más nuevo).
+- Cómo funciona: `pg_cron` llama cada 15 min a la Edge Function `send-reminders`, que calcula la hora local de cada persona y manda Web Push (VAPID). Las claves viven en Supabase Vault.
 
 ## Usarla sin internet
 
@@ -30,7 +39,7 @@ PWA instalable en iPhone y Android · React + TypeScript + Vite · Supabase · I
 2. Instalala: **iPhone** → Safari → Compartir → *Agregar a inicio*. **Android** → Chrome → ⋮ → *Instalar app*.
 3. Desde ahí funciona sin conexión: plan, entrenamiento, GPS, comidas, peso y fotos se guardan en el teléfono y se suben solos al reconectar.
 
-Necesitan internet: crear la cuenta / iniciar sesión, sincronizar entre dispositivos y el fondo del mapa en zonas no vistas. En iPhone el GPS se pausa si la app queda en segundo plano.
+Necesitan internet: crear la cuenta / iniciar sesión, sincronizar entre dispositivos, el fondo del mapa en zonas no vistas, actualizar el clima (sin conexión se ve el último pronóstico) y activar las notificaciones. En iPhone el GPS se pausa si la app queda en segundo plano.
 
 Detalle de arquitectura, decisiones y plan: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

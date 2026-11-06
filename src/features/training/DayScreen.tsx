@@ -1,4 +1,5 @@
 import { ArrowLeftRight, CalendarClock, Check, Info, Play, ShieldAlert, Undo2, X } from 'lucide-react';
+import { DayForecast } from '@/features/weather/WeatherCard';
 import { ACTIVITY_ICON, ACTIVITY_LABEL, ACTIVITY_VERB, activityOf } from '@/features/running/activity';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -138,6 +139,8 @@ function DayView({ day, plan, days, onStart }: { day: L<TrainingDay>; plan: L<Tr
           </ul>
         </Card>
       )}
+
+      {p.run && day.status !== 'completed' && <DayForecast date={day.date} activity={cardioAct} />}
 
       <Card>
         <SectionTitle>Indicaciones</SectionTitle>

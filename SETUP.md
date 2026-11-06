@@ -80,6 +80,24 @@ npx supabase secrets set AI_API_KEY=<clave-del-proveedor>   # queda en Supabase,
 
 Sin `AI_API_KEY` la app funciona completa y muestra "Asistente no disponible".
 
+### Notificaciones push (`send-reminders`)
+
+```bash
+npx supabase functions deploy send-reminders --no-verify-jwt   # se autentica sola (secreto del cron o token del usuario)
+npx web-push generate-vapid-keys --json                       # una sola vez
+```
+
+Guardá las claves y un secreto aleatorio en **Vault** (SQL Editor), nunca en el repo:
+
+```sql
+select vault.create_secret('<publicKey>',  'fit20_vapid_public');
+select vault.create_secret('<privateKey>', 'fit20_vapid_private');
+select vault.create_secret('<secreto-aleatorio>', 'fit20_cron_secret');
+```
+
+La migración `20261106000300_push_cron.sql` programa la función cada 15 minutos. Si cambiás la clave pública, actualizá `VITE_VAPID_PUBLIC_KEY` en Vercel (o el valor por defecto en `src/features/notify/push.ts`).
+Si cambiás `src/core/notify` o `src/core/weather`, corré `node scripts/sync-function-core.mjs` antes de desplegar.
+
 ## 8. Variables de entorno
 
 En Supabase: *Project Settings → API*. Copiá **solo**:

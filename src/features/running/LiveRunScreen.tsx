@@ -12,6 +12,8 @@ import type { LivePoint } from '@/lib/db/database';
 import { useCtx } from '@/features/training/hooks';
 import { beep, primeAudio, useWakeLock } from '@/features/training/useRestTimer';
 import { type ActiveRun, RunTooShortError, addLivePoint, discardRun, finishRun, getActiveRun, maxSpeedFor, pauseRun, prepareRun, setRunActivity, startRun, toGps } from './actions';
+import { WeatherCard } from '@/features/weather/WeatherCard';
+import { rememberLocation } from '@/features/weather/store';
 import { ACTIVITIES, ACTIVITY_ICON, ACTIVITY_LABEL, ACTIVITY_NOUN, fmtSpeed, usesSpeed } from './activity';
 
 const RouteMap = lazy(() => import('./RouteMap'));
@@ -93,6 +95,7 @@ export function LiveRunScreen() {
     const id = navigator.geolocation.watchPosition(
       (pos) => {
         setGps({ kind: 'ok', accuracy: Math.round(pos.coords.accuracy) });
+        if (pos.coords.accuracy < 2000) rememberLocation(pos.coords.latitude, pos.coords.longitude);
         const r = runRef.current;
         if (!r) return;
         void addLivePoint(db, r, { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }).then((p) => p && setPoints((ps) => [...ps, p]));
@@ -257,6 +260,7 @@ export function LiveRunScreen() {
         )}
       </div>
       {!idle && !running && <p className="text-center text-[13px] font-semibold text-warn">En pausa: no se suma distancia ni tiempo.</p>}
+      {idle && <WeatherCard activity={act} compact showPrompt={false} />}
 
       {!idle && (
         <button type="button" onClick={() => setShowMap((v) => !v)} className="inline-flex min-h-11 items-center justify-center gap-2 self-center rounded-full bg-raised px-4 text-[14px]">

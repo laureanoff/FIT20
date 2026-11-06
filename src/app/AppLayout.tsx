@@ -4,6 +4,8 @@ import { SyncBadge } from '@/components/SyncBadge';
 import { Wordmark, cx } from '@/components/ui';
 import { useProfile } from './data';
 import { UpdateBanner } from './pwa';
+import { useEffect } from 'react';
+import { startPushMaintenance } from '@/features/notify/push';
 
 const TABS = [
   { to: '/', label: 'Inicio', icon: House, end: true },
@@ -20,6 +22,7 @@ export function initials(name: string): string {
 
 export function AppLayout() {
   const profile = useProfile();
+  useEffect(() => startPushMaintenance(), []);
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col">
       <header className="pt-safe sticky top-0 z-20 bg-bg/90 backdrop-blur-md">

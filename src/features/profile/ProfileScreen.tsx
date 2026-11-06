@@ -91,6 +91,13 @@ function SettingsCard() {
             { value: 'system', label: 'Sistema' },
           ]}
         />
+        <Link to="/perfil/notificaciones" className="flex min-h-12 items-center justify-between gap-4">
+          <span className="flex flex-col">
+            <span className="text-[15px]">Notificaciones</span>
+            <span className="text-[13px] text-muted">Aviso diario con tu sesión y el clima</span>
+          </span>
+          <ChevronRight className="size-4 text-muted" aria-hidden />
+        </Link>
         <Toggle label="Sonido" description="Avisos del temporizador" checked={settings.sound_enabled} onChange={(v) => void saveSettings({ sound_enabled: v })} />
         <Toggle label="Vibración" checked={settings.vibration_enabled} onChange={(v) => void saveSettings({ vibration_enabled: v })} />
         <div className="flex flex-col gap-2">

@@ -10,6 +10,9 @@ import { useOpenWorkout, useTodayDay } from '@/features/training/hooks';
 import { SESSION_LABELS } from '@/features/training/format';
 import { useDayLog, useTargets } from '@/features/nutrition/hooks';
 import { InstallCard } from '@/app/pwa';
+import { NotifyPromo } from '@/features/notify/NotifyPromo';
+import { WeatherCard } from '@/features/weather/WeatherCard';
+import type { AdviceActivity } from '@/core/weather/weather';
 import { useData } from '@/app/data';
 import { alive } from '@/lib/db/database';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -46,6 +49,8 @@ export function DashboardScreen() {
 
       {/* Hoy */}
       <TodayHero trainsToday={trainsToday} sessionMinutes={profile.session_minutes} />
+
+      <TodayWeather />
 
       <TodayChecklist />
 
@@ -93,9 +98,18 @@ export function DashboardScreen() {
         <WeightGoal current={profile.current_weight_kg} target={profile.target_weight_kg} height={profile.height_cm} />
       </Card>
 
+      <NotifyPromo />
+
       <InstallCard />
     </div>
   );
+}
+
+function TodayWeather() {
+  const day = useTodayDay();
+  const run = day?.planned.run;
+  const activity: AdviceActivity = run ? (run.activity ?? 'run') : day && day.session_type !== 'rest' ? 'strength' : 'walk';
+  return <WeatherCard activity={activity} />;
 }
 
 function WeightGoal({ current, target, height }: { current: number; target: number | null; height: number }) {
