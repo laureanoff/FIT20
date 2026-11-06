@@ -1,4 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
+import { MusicCard } from '@/features/music/MusicCard';
 import { Check, ChevronLeft, ChevronRight, Minus, Pause, Play, Plus, SkipForward, Timer, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -126,6 +127,8 @@ export function SessionScreen() {
           Terminar ahora
         </button>
       )}
+
+      <MusicCard />
 
       {rest.timer && (
         <div role="timer" aria-live="off" className="pb-safe fixed inset-x-0 bottom-16 z-30 mx-auto max-w-md px-3">

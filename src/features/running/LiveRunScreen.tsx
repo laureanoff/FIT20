@@ -3,7 +3,7 @@ import { Flag, LocateFixed, LocateOff, Map as MapIcon, Pause, Play, Square, Tras
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { Button, ErrorBox, Spinner, Toggle, cx } from '@/components/ui';
+import { Button, ErrorBox, Segmented, Spinner, Toggle, cx } from '@/components/ui';
 import { useData } from '@/app/data';
 import { accumulateTrack, computeSplits, formatPace, paceSecPerKm } from '@/core/running/track';
 import type { CardioActivity } from '@/types/domain';
@@ -13,8 +13,10 @@ import { useCtx } from '@/features/training/hooks';
 import { beep, primeAudio, useWakeLock } from '@/features/training/useRestTimer';
 import { type ActiveRun, RunTooShortError, addLivePoint, discardRun, finishRun, getActiveRun, maxSpeedFor, pauseRun, prepareRun, setRunActivity, startRun, toGps } from './actions';
 import { WeatherCard } from '@/features/weather/WeatherCard';
+import { MusicCard } from '@/features/music/MusicCard';
 import { rememberLocation } from '@/features/weather/store';
-import { lockScreenActive, lockScreenEnabled, lockScreenSupported, setLockScreenEnabled, startLockScreen, stopLockScreen, updateLockScreen } from './lockscreen';
+import { lockScreenActive, lockScreenSupported, startLockScreen, stopLockScreen, updateLockScreen } from './lockscreen';
+import { type CardioAudioMode, announceEvery, cardioAudioMode, primeVoice, setCardioAudioMode, setVoiceEnabled, speak, splitPhrase, voiceEnabled, voiceSupported } from './voice';
 import { ACTIVITIES, ACTIVITY_ICON, ACTIVITY_LABEL, ACTIVITY_NOUN, fmtSpeed, usesSpeed } from './activity';
 
 const RouteMap = lazy(() => import('./RouteMap'));
@@ -52,7 +54,9 @@ export function LiveRunScreen() {
   const [finishing, setFinishing] = useState(false);
   const runRef = useRef<ActiveRun | null>(null);
   runRef.current = run;
-  const [lockOn, setLockOn] = useState(lockScreenEnabled);
+  const [audioMode, setAudioMode] = useState<CardioAudioMode>(cardioAudioMode);
+  const lockOn = audioMode === 'lock' && lockScreenSupported();
+  const [voiceOn, setVoiceOn] = useState(voiceEnabled);
   const [, bumpLock] = useState(0);
   const showOnLock = () => void startLockScreen(lockHandlers).then(() => bumpLock((n) => n + 1));
 
@@ -160,14 +164,29 @@ export function LiveRunScreen() {
   }, [run, lockSecond, track.distance_m]);
 
   // Aviso en cada kilómetro.
-  const lastSplits = useRef(0);
+  // Los parciales que ya existían al abrir la pantalla (p. ej. tras recargar) no se anuncian de nuevo.
+  const lastSplits = useRef<number | null>(null);
   useEffect(() => {
-    if (splits.length > lastSplits.current && lastSplits.current > 0) {
-      if (settings.sound_enabled) beep();
+    if (!run) return;
+    if (lastSplits.current === null) {
+      lastSplits.current = splits.length;
+      return;
+    }
+    if (splits.length > lastSplits.current) {
+      const last = splits[splits.length - 1]!;
+      const a = run.activity ?? 'run';
+      const every = announceEvery(a);
+      let spoke = false;
+      if (voiceOn && last.km % every === 0) {
+        const segment = splits.slice(-every).reduce((t, x) => t + x.duration_s, 0);
+        spoke = speak(splitPhrase(a, last.km, elapsedMs(run.stopwatch, Date.now()) / 1000, segment));
+      }
+      if (!spoke && settings.sound_enabled) beep();
       if (settings.vibration_enabled) navigator.vibrate?.([300, 120, 300]);
     }
     lastSplits.current = splits.length;
-  }, [splits.length, settings.sound_enabled, settings.vibration_enabled]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [splits.length, run?.id]);
 
   if (!run || day === undefined) return <Spinner label="Preparando el GPS…" />;
   const act = run.activity ?? 'run';
@@ -267,9 +286,9 @@ export function LiveRunScreen() {
       {gps.kind === 'unavailable' && <p className="rounded-2xl bg-warn/12 px-4 py-3 text-[14px] text-warn">{gps.message}</p>}
       {idle && (
         <p className="text-center text-[13px] text-muted">
-          {lockOn && lockScreenSupported()
+          {lockOn
             ? 'Con el celu bloqueado el tiempo sigue contando. En iPhone y algunos Android el GPS se pausa mientras está bloqueado: ese tramo se suma en línea recta al desbloquear.'
-            : 'Mantené la app abierta y la pantalla encendida: en iPhone el GPS se detiene si la app pasa a segundo plano.'}
+            : 'Para medir bien la distancia dejá la app abierta con la pantalla encendida (en iPhone el GPS se pausa con el celu bloqueado). El tiempo cuenta igual.'}
         </p>
       )}
 
@@ -280,6 +299,7 @@ export function LiveRunScreen() {
             type="button"
             onClick={() => {
               primeAudio();
+              if (voiceOn) primeVoice();
               if (lockOn) showOnLock();
               void startRun(db, run).then(setRun);
             }}
@@ -310,25 +330,49 @@ export function LiveRunScreen() {
         )}
       </div>
       {!idle && !running && <p className="text-center text-[13px] font-semibold text-warn">En pausa: no se suma distancia ni tiempo.</p>}
-      {idle && lockScreenSupported() && (
-        <div className="rounded-3xl border border-line bg-surface px-4 py-1">
-          <Toggle
-            label="Ver en la pantalla bloqueada"
-            description="Km, tiempo y ritmo con el celu bloqueado, y pausa sin desbloquear. Si escuchás música en otra app, puede pausarla."
-            checked={lockOn}
-            onChange={(v) => {
-              setLockOn(v);
-              setLockScreenEnabled(v);
-            }}
-          />
+      {idle && (lockScreenSupported() || voiceSupported()) && (
+        <div className="flex flex-col gap-2 rounded-3xl border border-line bg-surface p-4">
+          {lockScreenSupported() && (
+            <>
+              <Segmented
+                label="Audio durante la salida"
+                value={audioMode}
+                onChange={(m) => {
+                  setAudioMode(m);
+                  setCardioAudioMode(m);
+                }}
+                options={[
+                  { value: 'music', label: 'Con música' },
+                  { value: 'lock', label: 'Pantalla bloqueada' },
+                ]}
+              />
+              <p className="px-1 text-[13px] text-muted">
+                {audioMode === 'music'
+                  ? 'Tu música (Spotify u otra) sigue sonando. FIT 20 no se muestra en la pantalla bloqueada.'
+                  : 'Km, tiempo y ritmo en la pantalla bloqueada, con pausa sin desbloquear. Pausa la música de otras apps.'}
+              </p>
+            </>
+          )}
+          {voiceSupported() && (
+            <Toggle
+              label={act === 'bike' ? 'Aviso por voz cada 5 km' : 'Aviso por voz cada km'}
+              description={act === 'bike' ? 'Tiempo y velocidad; baja la música un momento.' : 'Tiempo y ritmo del último km; baja la música un momento.'}
+              checked={voiceOn}
+              onChange={(v) => {
+                setVoiceOn(v);
+                setVoiceEnabled(v);
+              }}
+            />
+          )}
         </div>
       )}
       {!idle && !running && lockScreenActive() && <p className="text-center text-[13px] text-muted">También podés reanudar desde la pantalla bloqueada.</p>}
-      {running && lockOn && lockScreenSupported() && !lockScreenActive() && (
+      {running && lockOn && !lockScreenActive() && (
         <button type="button" onClick={showOnLock} className="inline-flex min-h-11 items-center justify-center self-center rounded-full bg-raised px-4 text-[14px]">
           Mostrar en la pantalla bloqueada
         </button>
       )}
+      <MusicCard />
       {idle && <WeatherCard activity={act} compact showPrompt={false} />}
 
       {!idle && (

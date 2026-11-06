@@ -6,6 +6,7 @@ import { DashboardScreen } from '@/features/dashboard/DashboardScreen';
 import { OnboardingScreen } from '@/features/onboarding/OnboardingScreen';
 import { ProfileEditScreen, ProfileScreen } from '@/features/profile/ProfileScreen';
 import { NotificationsScreen } from '@/features/notify/NotificationsScreen';
+import { MusicSettingsScreen, SpotifyCallbackScreen } from '@/features/music/MusicScreens';
 import { MealPlanScreen } from '@/features/nutrition/MealPlanScreen';
 import { AddFoodScreen, CustomFoodScreen, EditFoodLogScreen, NutritionScreen, TargetsScreen } from '@/features/nutrition/NutritionScreens';
 import { CompareScreen, MeasureScreen, NewPhotoScreen, PhotoScreen, ProgressScreen } from '@/features/progress/ProgressScreens';
@@ -121,6 +122,8 @@ function UserGate() {
         <Route path="progreso/comparar" element={<CompareScreen />} />
         <Route path="perfil" element={<ProfileScreen />} />
         <Route path="perfil/notificaciones" element={<NotificationsScreen />} />
+        <Route path="perfil/musica" element={<MusicSettingsScreen />} />
+        <Route path="spotify/callback" element={<SpotifyCallbackScreen />} />
         <Route path="perfil/:section" element={<ProfileEditScreen />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

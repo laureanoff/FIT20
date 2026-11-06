@@ -31,6 +31,8 @@ PWA instalable en iPhone y Android · React + TypeScript + Vite · Supabase · I
 
 - **Clima**: en Inicio, Cardio y cada día del plan. Usa tu ubicación aproximada (~1 km), que queda en el teléfono; si salís con GPS la toma de ahí sin volver a pedir permiso.
 - **Notificaciones**: Perfil → Notificaciones → *Activar*. Elegís la hora del aviso de la mañana (qué entrenás hoy + clima) y, si querés, un recordatorio a la noche solo cuando la sesión sigue pendiente. En **iPhone** primero hay que instalar la app (Compartir → *Agregar a inicio*) y activarlas desde ahí (iOS 16.4 o más nuevo).
+- **Música (Spotify)**: Perfil → Música. Se activa una vez creando una app en developer.spotify.com (requiere Premium) y pegando su Client ID; después, en la salida de cardio y en la sesión de fuerza ves qué suena, pausás, pasás de tema y elegís playlists. La música suena en la app de Spotify. Opcional: `VITE_SPOTIFY_CLIENT_ID` en Vercel para no pegarlo en cada teléfono.
+- **Audio en la salida**: "Con música" (por defecto) no toca el audio del teléfono; avisos por voz cada km (cada 5 km en bici).
 - **Pantalla bloqueada**: durante una salida con GPS, km, tiempo y ritmo aparecen en la pantalla de bloqueo (panel de "reproduciendo ahora"), con pausa/reanudar sin desbloquear. Se puede apagar antes de largar. Usa un tono inaudible para que el sistema lo muestre, así que puede pausar la música de otra app.
 - Cómo funciona: `pg_cron` llama cada 15 min a la Edge Function `send-reminders`, que calcula la hora local de cada persona y manda Web Push (VAPID). Las claves viven en Supabase Vault.
 

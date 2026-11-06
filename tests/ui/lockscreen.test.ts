@@ -1,5 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { announceEvery, cardioAudioMode, setCardioAudioMode, splitPhrase, voiceEnabled } from '@/features/running/voice';
 import { lockScreenEnabled, lockScreenText, setLockScreenEnabled, startLockScreen, stopLockScreen, updateLockScreen } from '@/features/running/lockscreen';
+
+describe('avisos por voz', () => {
+  it('arma la frase de cada km y en bici cada 5 km', () => {
+    expect(splitPhrase('run', 3, 1025, 340)).toBe('Kilómetro 3. Tiempo: 17 minutos 5 segundos. Último kilómetro a 5 40.');
+    expect(splitPhrase('walk', 1, 600, 605)).toBe('Kilómetro 1. Tiempo: 10 minutos. Último kilómetro a 10 cero 5.');
+    expect(splitPhrase('bike', 10, 3720, 750)).toBe('Kilómetro 10. Tiempo: 1 hora 2 minutos. Velocidad: 24 kilómetros por hora.');
+    expect(announceEvery('bike')).toBe(5);
+    expect(announceEvery('run')).toBe(1);
+  });
+  it('por defecto la música sigue sonando y la voz está activada', () => {
+    localStorage.clear();
+    expect(cardioAudioMode()).toBe('music');
+    expect(voiceEnabled()).toBe(true);
+    setCardioAudioMode('lock');
+    expect(cardioAudioMode()).toBe('lock');
+    localStorage.clear();
+  });
+});
 
 describe('pantalla de bloqueo', () => {
   it('arma los textos del panel', () => {
@@ -14,6 +33,8 @@ describe('pantalla de bloqueo', () => {
 
   it('se puede apagar y recuerda la preferencia', () => {
     localStorage.clear();
+    expect(lockScreenEnabled()).toBe(false); // por defecto "con música": no toma el audio
+    setLockScreenEnabled(true);
     expect(lockScreenEnabled()).toBe(true);
     setLockScreenEnabled(false);
     expect(lockScreenEnabled()).toBe(false);
@@ -25,6 +46,7 @@ describe('pantalla de bloqueo', () => {
     const ms = { metadata: null as unknown, playbackState: 'none', setActionHandler: (a: string, h: (() => void) | null) => handlers.set(a, h), setPositionState: vi.fn() };
     beforeEach(() => {
       handlers.clear();
+      setLockScreenEnabled(true);
       Object.defineProperty(navigator, 'mediaSession', { value: ms, configurable: true });
       vi.stubGlobal('MediaMetadata', class {
         constructor(init: object) {
@@ -65,7 +87,6 @@ describe('pantalla de bloqueo', () => {
     it('si no está activado no toca nada', async () => {
       setLockScreenEnabled(false);
       expect(await startLockScreen({ onPause: vi.fn(), onResume: vi.fn() })).toBe(false);
-      setLockScreenEnabled(true);
     });
   });
 });

@@ -98,6 +98,13 @@ function SettingsCard() {
           </span>
           <ChevronRight className="size-4 text-muted" aria-hidden />
         </Link>
+        <Link to="/perfil/musica" className="flex min-h-12 items-center justify-between gap-4">
+          <span className="flex flex-col">
+            <span className="text-[15px]">Música</span>
+            <span className="text-[13px] text-muted">Spotify mientras entrenás</span>
+          </span>
+          <ChevronRight className="size-4 text-muted" aria-hidden />
+        </Link>
         <Toggle label="Sonido" description="Avisos del temporizador" checked={settings.sound_enabled} onChange={(v) => void saveSettings({ sound_enabled: v })} />
         <Toggle label="Vibración" checked={settings.vibration_enabled} onChange={(v) => void saveSettings({ vibration_enabled: v })} />
         <div className="flex flex-col gap-2">

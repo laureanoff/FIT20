@@ -5,8 +5,11 @@
  * "reproduciendo ahora" (Media Session): muestra distancia, tiempo y ritmo, con pausa/reanudar
  * sin desbloquear, en Android (pantalla de bloqueo y notificaciones) y en iPhone.
  * Para que el sistema lo muestre, la app reproduce un tono inaudible (30 Hz, -64 dB) en bucle;
- * eso además evita que el navegador congele la app con la pantalla apagada.
+ * eso además evita que el navegador congele la app con la pantalla apagada. Contra: el sistema le da
+ * el audio a FIT 20 y pausa la música de otras apps (iPhone y Android no permiten compartir ese panel).
  */
+
+import { cardioAudioMode, setCardioAudioMode } from './voice';
 
 export interface LockScreenState {
   activityLabel: string; // "Running", "Caminata", "Bici"
@@ -24,21 +27,12 @@ export interface LockScreenHandlers {
   onResume: () => void;
 }
 
-const PREF_KEY = 'fit20:lockscreen';
-
+/** Solo en modo "pantalla bloqueada": en modo "con música" la app no reproduce nada para no cortar tu música. */
 export function lockScreenEnabled(): boolean {
-  try {
-    return localStorage.getItem(PREF_KEY) !== '0';
-  } catch {
-    return true;
-  }
+  return cardioAudioMode() === 'lock';
 }
 export function setLockScreenEnabled(on: boolean): void {
-  try {
-    localStorage.setItem(PREF_KEY, on ? '1' : '0');
-  } catch {
-    /* opcional */
-  }
+  setCardioAudioMode(on ? 'lock' : 'music');
 }
 
 export function lockScreenSupported(): boolean {
@@ -88,6 +82,19 @@ function keepAliveWav(): string {
   return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
 }
 
+/**
+ * Sesión de audio de Safari (iOS 17+): "ambient" mezcla los pitidos con tu música sin cortarla;
+ * "playback" es necesario para el panel de la pantalla bloqueada (y pausa la música de otras apps).
+ */
+export function setAudioSession(type: 'ambient' | 'playback'): void {
+  const nav = typeof navigator !== 'undefined' ? (navigator as Navigator & { audioSession?: { type: string } }) : null;
+  try {
+    if (nav?.audioSession) nav.audioSession.type = type;
+  } catch {
+    /* no soportado */
+  }
+}
+
 let audio: HTMLAudioElement | null = null;
 let audioUrl: string | null = null;
 let lastText = '';
@@ -104,8 +111,10 @@ export async function startLockScreen(handlers: LockScreenHandlers): Promise<boo
       audio.setAttribute('playsinline', '');
       audio.preload = 'auto';
     }
+    setAudioSession('playback');
     await audio.play();
   } catch {
+    setAudioSession('ambient');
     return false; // sin permiso de audio: la app sigue funcionando igual, sin el panel
   }
   const ms = navigator.mediaSession;
@@ -174,6 +183,7 @@ export function stopLockScreen(): void {
   audioUrl = null;
   lastText = '';
   lastPositionAt = 0;
+  setAudioSession('ambient');
   if (!lockScreenSupported()) return;
   const ms = navigator.mediaSession;
   ms.metadata = null;
