@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Flag, LocateFixed, LocateOff, Map as MapIcon, Pause, Play, Square, Trash2 } from 'lucide-react';
+import { Flag, LocateFixed, LocateOff, Map as MapIcon, Moon, Pause, Play, Square, Trash2 } from 'lucide-react';
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -13,6 +13,7 @@ import { useCtx } from '@/features/training/hooks';
 import { beep, primeAudio, useWakeLock } from '@/features/training/useRestTimer';
 import { type ActiveRun, RunTooShortError, addLivePoint, discardRun, finishRun, getActiveRun, maxSpeedFor, pauseRun, prepareRun, setRunActivity, startRun, toGps } from './actions';
 import { WeatherCard } from '@/features/weather/WeatherCard';
+import { PocketMode } from './PocketMode';
 import { MusicCard } from '@/features/music/MusicCard';
 import { rememberLocation } from '@/features/weather/store';
 import { lockScreenActive, lockScreenSupported, setAudioSession, startLockScreen, stopLockScreen, updateLockScreen } from './lockscreen';
@@ -65,6 +66,7 @@ export function LiveRunScreen() {
   const [liveBusy, setLiveBusy] = useState(false);
   const [lockFailed, setLockFailed] = useState(false);
   const [demoUntil, setDemoUntil] = useState(0);
+  const [pocket, setPocket] = useState(false);
   const [, bumpLock] = useState(0);
   const liveRef = useRef<LiveSnapshot | null>(null);
   /** Elegir cada cuánto llega la notificación en vivo (activa las notificaciones si hacía falta; es dentro de un toque). */
@@ -390,7 +392,7 @@ export function LiveRunScreen() {
         <p className="text-center text-[13px] text-muted">
           {lockOn
             ? 'Con el celu bloqueado el tiempo sigue contando. En iPhone y algunos Android el GPS se pausa mientras está bloqueado: ese tramo se suma en línea recta al desbloquear.'
-            : 'Para medir bien la distancia dejá la app abierta con la pantalla encendida (en iPhone el GPS se pausa con el celu bloqueado). El tiempo cuenta igual.'}
+            : 'El iPhone pausa el GPS si bloqueás el celu: para medir bien con la música sonando, usá el modo bolsillo (pantalla negra, la app sigue abierta).'}
         </p>
       )}
 
@@ -534,9 +536,24 @@ export function LiveRunScreen() {
       {idle && <WeatherCard activity={act} compact showPrompt={false} />}
 
       {!idle && (
-        <button type="button" onClick={() => setShowMap((v) => !v)} className="inline-flex min-h-11 items-center justify-center gap-2 self-center rounded-full bg-raised px-4 text-[14px]">
-          <MapIcon className="size-4" aria-hidden /> {showMap ? 'Ocultar mapa' : 'Ver mapa'}
-        </button>
+        <div className="flex flex-col gap-2">
+          <button type="button" onClick={() => setPocket(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-ink text-[15px] font-semibold text-bg">
+            <Moon className="size-4" aria-hidden /> Modo bolsillo
+          </button>
+          <p className="px-2 text-center text-[12px] text-muted">Pantalla negra con tiempo y km: el GPS sigue midiendo y la música sigue sonando. No bloquees el celu.</p>
+          <button type="button" onClick={() => setShowMap((v) => !v)} className="inline-flex min-h-11 items-center justify-center gap-2 self-center rounded-full bg-raised px-4 text-[14px]">
+            <MapIcon className="size-4" aria-hidden /> {showMap ? 'Ocultar mapa' : 'Ver mapa'}
+          </button>
+        </div>
+      )}
+      {pocket && !idle && (
+        <PocketMode
+          time={formatClock(elapsed)}
+          km={km(track.distance_m)}
+          rate={speed ? `${fmtSpeed(toKmh(pace ?? avg))} km/h` : `${formatPace(pace ?? avg)}/km`}
+          paused={!running}
+          onExit={() => setPocket(false)}
+        />
       )}
       {showMap && (
         <ErrorBoundary fallback={(retry) => <MapUnavailable retry={retry} />}>
