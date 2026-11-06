@@ -15,7 +15,8 @@ import { type ActiveRun, RunTooShortError, addLivePoint, discardRun, finishRun, 
 import { WeatherCard } from '@/features/weather/WeatherCard';
 import { MusicCard } from '@/features/music/MusicCard';
 import { rememberLocation } from '@/features/weather/store';
-import { lockScreenActive, lockScreenSupported, startLockScreen, stopLockScreen, updateLockScreen } from './lockscreen';
+import { lockScreenActive, lockScreenSupported, setAudioSession, startLockScreen, stopLockScreen, updateLockScreen } from './lockscreen';
+import { clearProgress, kmNotifyEnabled, kmNotifySupported, setKmNotify, showProgress } from './liveNotify';
 import { type CardioAudioMode, announceEvery, cardioAudioMode, primeVoice, setCardioAudioMode, setVoiceEnabled, speak, splitPhrase, voiceEnabled, voiceSupported } from './voice';
 import { ACTIVITIES, ACTIVITY_ICON, ACTIVITY_LABEL, ACTIVITY_NOUN, fmtSpeed, usesSpeed } from './activity';
 
@@ -57,8 +58,15 @@ export function LiveRunScreen() {
   const [audioMode, setAudioMode] = useState<CardioAudioMode>(cardioAudioMode);
   const lockOn = audioMode === 'lock' && lockScreenSupported();
   const [voiceOn, setVoiceOn] = useState(voiceEnabled);
+  const [kmNotifyOn, setKmNotifyOn] = useState(kmNotifyEnabled);
+  const [lockFailed, setLockFailed] = useState(false);
+  const [demoUntil, setDemoUntil] = useState(0);
   const [, bumpLock] = useState(0);
-  const showOnLock = () => void startLockScreen(lockHandlers).then(() => bumpLock((n) => n + 1));
+  const showOnLock = () =>
+    void startLockScreen(lockHandlers).then((ok) => {
+      setLockFailed(!ok);
+      bumpLock((n) => n + 1);
+    });
 
   // Pausa / reanudar desde la pantalla de bloqueo.
   const lockHandlers = useMemo(
@@ -164,6 +172,25 @@ export function LiveRunScreen() {
   }, [run, lockSecond, track.distance_m]);
 
   // Aviso en cada kilómetro.
+  // Prueba de la pantalla bloqueada sin empezar la salida: 60 s con datos de ejemplo.
+  useEffect(() => {
+    if (!demoUntil) return;
+    const started = Date.now();
+    const tick = () => {
+      const left = demoUntil - Date.now();
+      if (left <= 0 || runRef.current?.stopwatch.status !== 'idle') {
+        if (runRef.current?.stopwatch.status === 'idle') stopLockScreen();
+        setDemoUntil(0);
+        return;
+      }
+      const ms = Date.now() - started;
+      updateLockScreen({ activityLabel: 'Prueba', distanceKm: ms / 1000 / 360, elapsedMs: ms, rate: '6:00/km', running: true });
+    };
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, [demoUntil]);
+
   // Los parciales que ya existían al abrir la pantalla (p. ej. tras recargar) no se anuncian de nuevo.
   const lastSplits = useRef<number | null>(null);
   useEffect(() => {
@@ -182,6 +209,14 @@ export function LiveRunScreen() {
         spoke = speak(splitPhrase(a, last.km, elapsedMs(run.stopwatch, Date.now()) / 1000, segment));
       }
       if (!spoke && settings.sound_enabled) beep();
+      if (kmNotifyOn) {
+        const secs = elapsedMs(run.stopwatch, Date.now()) / 1000;
+        const kmh = (3600 / Math.max(1, last.duration_s)).toLocaleString('es-AR', { maximumFractionDigits: 1 });
+        void showProgress(
+          `${ACTIVITY_LABEL[a]} · km ${last.km} · ${formatClock(secs * 1000)}`,
+          usesSpeed(a) ? `Último km a ${kmh} km/h` : `Último km a ${formatPace(last.duration_s)}/km`,
+        );
+      }
       if (settings.vibration_enabled) navigator.vibrate?.([300, 120, 300]);
     }
     lastSplits.current = splits.length;
@@ -205,10 +240,12 @@ export function LiveRunScreen() {
         onSave={async (rpe, notes) => {
           const id = await finishRun(ctx, run, { rpe, notes });
           stopLockScreen();
+          void clearProgress();
           navigate(`/running/${id}`, { replace: true });
         }}
         onDiscard={async () => {
           stopLockScreen();
+          void clearProgress();
           await discardRun(db);
           navigate('/running', { replace: true });
         }}
@@ -298,9 +335,12 @@ export function LiveRunScreen() {
           <button
             type="button"
             onClick={() => {
+              // Primero el audio de la pantalla bloqueada (iPhone decide el tipo de audio con el primero que suena).
+              setDemoUntil(0);
+              if (lockOn) showOnLock();
+              else setAudioSession('ambient'); // pitidos mezclados con tu música, sin cortarla
               primeAudio();
               if (voiceOn) primeVoice();
-              if (lockOn) showOnLock();
               void startRun(db, run).then(setRun);
             }}
             className="grid size-24 place-items-center rounded-full bg-accent text-accent-ink shadow-lg active:scale-95"
@@ -351,7 +391,35 @@ export function LiveRunScreen() {
                   ? 'Tu música (Spotify u otra) sigue sonando. FIT 20 no se muestra en la pantalla bloqueada.'
                   : 'Km, tiempo y ritmo en la pantalla bloqueada, con pausa sin desbloquear. Pausa la música de otras apps.'}
               </p>
+              {audioMode === 'lock' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    showOnLock();
+                    setDemoUntil(Date.now() + 60_000);
+                  }}
+                  className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-raised text-[14px] font-semibold"
+                >
+                  {demoUntil ? 'Probando: bloqueá el celu ahora (60 s)' : 'Probar ahora sin empezar'}
+                </button>
+              )}
+              {audioMode === 'lock' && lockFailed && (
+                <p className="rounded-xl bg-warn/12 px-3 py-2 text-[13px] text-warn">Este teléfono no dejó mostrar FIT 20 en la pantalla bloqueada. Revisá que no esté en modo silencio con el volumen en cero y probá de nuevo.</p>
+              )}
             </>
+          )}
+          {kmNotifySupported() && (
+            <Toggle
+              label="Notificación en cada km"
+              description="Km, tiempo y ritmo en la pantalla bloqueada a cada km. En iPhone, con la app instalada."
+              checked={kmNotifyOn}
+              onChange={(v) =>
+                void setKmNotify(v).then((on) => {
+                  setKmNotifyOn(on);
+                  if (on) void showProgress('Así te llega en cada km', 'Running · km 1 · 5:40 — Último km a 5:40/km');
+                })
+              }
+            />
           )}
           {voiceSupported() && (
             <Toggle

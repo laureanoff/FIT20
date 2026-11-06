@@ -56,6 +56,7 @@ export default defineConfig({
       workbox: {
         // App shell completo precacheado: la app abre sin internet después de la primera carga.
         globPatterns: ['**/*.{js,css,html,svg,png,woff2,json}'],
+        // El audio de /sounds queda fuera del service worker: iPhone necesita respuestas parciales (Range) para reproducirlo.
         // Recepción de notificaciones push (public/push-sw.js).
         importScripts: ['/push-sw.js'],
         navigateFallback: '/index.html',

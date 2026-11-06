@@ -57,30 +57,11 @@ export function lockScreenText(s: LockScreenState): { title: string; artist: str
   return { title, artist: parts.join(' · '), album: 'FIT 20' };
 }
 
-/** WAV de 2 s: tono de 30 Hz muy bajo. Inaudible en el parlante del teléfono, pero el sistema lo cuenta como audio. */
-function keepAliveWav(): string {
-  const rate = 8000;
-  const seconds = 2;
-  const n = rate * seconds;
-  const buf = new ArrayBuffer(44 + n * 2);
-  const v = new DataView(buf);
-  const str = (o: number, t: string) => [...t].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
-  str(0, 'RIFF');
-  v.setUint32(4, 36 + n * 2, true);
-  str(8, 'WAVE');
-  str(12, 'fmt ');
-  v.setUint32(16, 16, true);
-  v.setUint16(20, 1, true); // PCM
-  v.setUint16(22, 1, true); // mono
-  v.setUint32(24, rate, true);
-  v.setUint32(28, rate * 2, true);
-  v.setUint16(32, 2, true);
-  v.setUint16(34, 16, true);
-  str(36, 'data');
-  v.setUint32(40, n * 2, true);
-  for (let i = 0; i < n; i++) v.setInt16(44 + i * 2, Math.round(20 * Math.sin((2 * Math.PI * 30 * i) / rate)), true);
-  return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
-}
+/**
+ * Audio de fondo: 60 s de un tono de 40 Hz a -50 dB (inaudible; los parlantes del teléfono ni lo reproducen).
+ * Es un archivo real y largo porque iPhone no muestra en la pantalla bloqueada audios cortos o generados en memoria.
+ */
+export const KEEPALIVE_SRC = '/sounds/keepalive.m4a';
 
 /**
  * Sesión de audio de Safari (iOS 17+): "ambient" mezcla los pitidos con tu música sin cortarla;
@@ -96,7 +77,6 @@ export function setAudioSession(type: 'ambient' | 'playback'): void {
 }
 
 let audio: HTMLAudioElement | null = null;
-let audioUrl: string | null = null;
 let lastText = '';
 let lastPositionAt = 0;
 
@@ -105,8 +85,7 @@ export async function startLockScreen(handlers: LockScreenHandlers): Promise<boo
   if (!lockScreenSupported() || !lockScreenEnabled()) return false;
   try {
     if (!audio) {
-      audioUrl = keepAliveWav();
-      audio = new Audio(audioUrl);
+      audio = new Audio(KEEPALIVE_SRC);
       audio.loop = true;
       audio.setAttribute('playsinline', '');
       audio.preload = 'auto';
@@ -179,8 +158,6 @@ export function stopLockScreen(): void {
     audio.load();
     audio = null;
   }
-  if (audioUrl) URL.revokeObjectURL(audioUrl);
-  audioUrl = null;
   lastText = '';
   lastPositionAt = 0;
   setAudioSession('ambient');
